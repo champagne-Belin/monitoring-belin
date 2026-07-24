@@ -129,13 +129,13 @@
   <div class="grid" id="cards"></div>
 
   <section class="chart-section">
-    <h2>Maison (maisonT) — Température &amp; Humidité</h2>
+    <h2 id="h2Maison">Maison (maisonT) — Température &amp; Humidité</h2>
     <div class="sub">15 derniers jours · échelle auto sur les valeurs</div>
     <div class="chart-holder"><canvas id="chartMaison"></canvas></div>
   </section>
 
   <section class="chart-section">
-    <h2>Cuverie — Température &amp; Humidité</h2>
+    <h2 id="h2Cuverie">Cuverie — Température &amp; Humidité</h2>
     <div class="sub">15 derniers jours · échelle auto sur les valeurs</div>
     <div class="chart-holder"><canvas id="chartCuverie"></canvas></div>
   </section>
@@ -257,8 +257,9 @@ function renderCard({title, updated, stats, worstStatus, error}){
   if(error){
     el.innerHTML = `<div class="label">${title}</div><div class="error-msg">Chargement impossible : ${error}</div>`;
   } else {
+    const summary = stats.map(s => `${s.value}${s.unit}`).join(' · ');
     el.innerHTML = `
-      <div class="label">${title}</div>
+      <div class="label">${title} <span style="color:var(--gold);letter-spacing:0;text-transform:none;">— ${summary}</span></div>
       <div class="value-row">
         ${stats.map(s => `<div class="stat"><span class="num">${s.value}</span><span class="unit">${s.unit}</span></div>`).join('')}
       </div>
@@ -268,6 +269,40 @@ function renderCard({title, updated, stats, worstStatus, error}){
   }
   document.getElementById('cards').appendChild(el);
 }
+
+// Plugin : affiche la dernière valeur directement sur la courbe
+const lastValueLabelPlugin = {
+  id:'lastValueLabel',
+  afterDatasetsDraw(chart){
+    const {ctx, chartArea} = chart;
+    chart.data.datasets.forEach((ds, i) => {
+      if(ds.hideLabel) return;
+      const meta = chart.getDatasetMeta(i);
+      if(!meta || meta.hidden) return;
+      const points = meta.data;
+      if(!points || !points.length) return;
+      const val = ds.data[ds.data.length-1];
+      if(val==null || isNaN(val)) return;
+      const lastPoint = points[points.length-1];
+      ctx.save();
+      ctx.font = 'bold 11px -apple-system, sans-serif';
+      ctx.textBaseline = 'middle';
+      const label = (Number.isInteger(val) ? val : val.toFixed(val < 10 ? 3 : 1)) + (ds.unitSuffix||'');
+      const textWidth = ctx.measureText(label).width;
+      const flip = (lastPoint.x + 6 + textWidth) > chartArea.right;
+      ctx.textAlign = flip ? 'right' : 'left';
+      const x = flip ? lastPoint.x - 6 : lastPoint.x + 6;
+      ctx.fillStyle = '#ffffff';
+      const pad = 2;
+      const tw = ctx.measureText(label).width;
+      ctx.fillRect(flip ? x-tw-pad : x-pad, lastPoint.y-8, tw+pad*2, 16);
+      ctx.fillStyle = ds.borderColor;
+      ctx.fillText(label, x, lastPoint.y);
+      ctx.restore();
+    });
+  }
+};
+Chart.register(lastValueLabelPlugin);
 
 Chart.defaults.color = '#756f60';
 Chart.defaults.font.family = "-apple-system, 'Segoe UI', sans-serif";
@@ -281,22 +316,29 @@ function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[i
 
 function dualAxisChart(canvasId, labels, tempData, humData, tRange, hRange){
   destroyChart(canvasId);
-  const yOpts = { position:'left', title:{display:true,text:'°C'}, grid:{color:'#ece7db'} };
+  const yOpts = { position:'left', title:{display:true,text:'°C'}, grid:{color:'#ece7db'}, ticks:{color:'#a9791f'} };
   if(tRange){ yOpts.min = tRange[0]; yOpts.max = tRange[1]; }
-  const y1Opts = { position:'right', title:{display:true,text:'%'}, grid:{display:false} };
+  const yTempRightOpts = { position:'right', title:{display:true,text:'°C'}, grid:{display:false}, ticks:{color:'#a9791f'} };
+  if(tRange){ yTempRightOpts.min = tRange[0]; yTempRightOpts.max = tRange[1]; }
+  const y1Opts = { position:'right', title:{display:true,text:'%'}, grid:{display:false}, ticks:{color:'#5f8ea8'} };
   if(hRange){ y1Opts.min = hRange[0]; y1Opts.max = hRange[1]; }
   charts[canvasId] = new Chart(document.getElementById(canvasId), {
     type:'line',
     data:{ labels, datasets:[
-      { label:'Température (°C)', data:tempData, yAxisID:'y', borderColor:'#c9a24b', backgroundColor:'rgba(201,162,75,0.08)', tension:0.3, pointRadius:2, borderWidth:2, fill:true },
-      { label:'Humidité (%)', data:humData, yAxisID:'y1', borderColor:'#5f8ea8', backgroundColor:'rgba(95,142,168,0.06)', tension:0.3, pointRadius:2, borderWidth:2, fill:true }
+      { label:'Température (°C)', data:tempData, yAxisID:'y', borderColor:'#c9a24b', backgroundColor:'rgba(201,162,75,0.08)', tension:0.3, pointRadius:2, borderWidth:2, fill:true, unitSuffix:'°C' },
+      { label:'Température (miroir)', data:tempData, yAxisID:'yTempRight', borderColor:'#c9a24b', borderWidth:0, pointRadius:0, fill:false, excludeFromLegend:true, hideLabel:true },
+      { label:'Humidité (%)', data:humData, yAxisID:'y1', borderColor:'#5f8ea8', backgroundColor:'rgba(95,142,168,0.06)', tension:0.3, pointRadius:2, borderWidth:2, fill:true, unitSuffix:'%' }
     ]},
     options:{
       responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
-      plugins:{ legend:{labels:{boxWidth:10,padding:12,font:{size:isMobile?10:12}}} },
+      plugins:{
+        legend:{labels:{boxWidth:10,padding:12,font:{size:isMobile?10:12}, filter:(item,data)=> !data.datasets[item.datasetIndex].excludeFromLegend}},
+        tooltip:{filter:(item)=> !item.dataset.excludeFromLegend}
+      },
       scales:{
         x:{ grid:{color:'#ece7db'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:xTickLimit} },
         y:yOpts,
+        yTempRight:yTempRightOpts,
         y1:y1Opts
       }
     }
@@ -380,6 +422,12 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
       worst = worstOf([worst, sP]);
     }
     renderCard({ title: key==='maisonT' ? 'Maison (maisonT)' : 'Cuverie', updated: fmtDT(last.dt), stats, worstStatus: worst });
+
+    const h2 = document.getElementById(key==='maisonT' ? 'h2Maison' : 'h2Cuverie');
+    if(h2){
+      const baseTitle = key==='maisonT' ? 'Maison (maisonT)' : 'Cuverie';
+      h2.textContent = `${baseTitle} — Température & Humidité (dernier relevé : ${stats.map(s=>s.value+s.unit).join(' · ')})`;
+    }
   } catch(e){
     renderCard({ title: key==='maisonT' ? 'Maison (maisonT)' : 'Cuverie', error: e.message, worstStatus:'bad' });
     document.querySelector('#'+canvasId).closest('section').querySelector('.sub').textContent = 'Données indisponibles pour le moment.';
