@@ -334,6 +334,10 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
       pres: presIdx>=0 ? toNum(r[presIdx]) : null
     })).filter(r => r.dt && !isNaN(r.temp));
 
+    if(parsed.length === 0){
+      throw new Error(`Aucune ligne exploitable. En-tête détecté : [${rows[0].join(' | ')}]. Vérifie que c'est le bon onglet (attendu: Date, Sonde, Température, Humidité).`);
+    }
+
     parsed.sort((a,b) => a.dt - b.dt);
     const recent = parsed.slice(-30);
 
@@ -366,6 +370,11 @@ async function loadPression(){
     if(presIdx<0) presIdx = 1;
     const parsed = rows.slice(1).map(r => ({ dt: parseFRDateTime(r[0]), pres: toNum(r[presIdx]) }))
       .filter(r => r.dt && !isNaN(r.pres));
+
+    if(parsed.length === 0){
+      throw new Error(`Aucune ligne exploitable. En-tête détecté : [${rows[0].join(' | ')}]. Vérifie que c'est bien l'onglet du journal de pression.`);
+    }
+
     parsed.sort((a,b)=>a.dt-b.dt);
     const sample = downsample(parsed, 120);
 
@@ -394,6 +403,10 @@ async function loadGyro(){
       phase: (r[phaseIdx>=0?phaseIdx:3]||'').trim(),
       elapsed: toNum(r[elapsedIdx>=0?elapsedIdx:2])
     })).filter(r => r.dt && !isNaN(r.angle));
+
+    if(parsed.length === 0){
+      throw new Error(`Aucune ligne exploitable. En-tête détecté : [${rows[0].join(' | ')}].`);
+    }
 
     parsed.sort((a,b)=>a.dt-b.dt);
     const recent = parsed.slice(-60);
