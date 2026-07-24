@@ -7,21 +7,22 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
   :root{
-    --bg: #0f1512;
-    --panel: #161f1a;
-    --panel-border: #253028;
-    --text: #eae6da;
-    --text-dim: #9aa89e;
-    --gold: #c9a24b;
-    --ok: #6fae7a;
-    --warn: #d98a3d;
-    --bad: #c1533f;
+    --bg: #fbfaf7;
+    --panel: #ffffff;
+    --panel-border: #e3ddce;
+    --text: #24211b;
+    --text-dim: #756f60;
+    --gold: #a3782f;
+    --ok: #3f8a52;
+    --warn: #b56a1e;
+    --bad: #b23b2a;
+    --grid-line: #ece7db;
   }
   *{box-sizing:border-box;}
   body{
     margin:0;
     background:
-      radial-gradient(1200px 600px at 15% -10%, #1a241d 0%, transparent 60%),
+      radial-gradient(1200px 600px at 15% -10%, #f3efe3 0%, transparent 60%),
       var(--bg);
     color:var(--text);
     font-family: 'Georgia', 'Iowan Old Style', serif;
@@ -67,6 +68,7 @@
   .card{
     background:var(--panel); border:1px solid var(--panel-border); border-radius:6px;
     padding:14px 16px; position:relative; overflow:hidden;
+    box-shadow:0 1px 3px rgba(36,33,27,0.06);
   }
   @media (min-width:640px){ .card{padding:18px 20px;} }
   .card::before{ content:""; position:absolute; top:0; left:0; bottom:0; width:3px; background:var(--ok); }
@@ -84,13 +86,14 @@
   .card .updated{ font-family: -apple-system, 'Segoe UI', sans-serif; font-size:11px; color:var(--text-dim); margin-top:10px; }
   .card .status-badge{
     font-family: -apple-system, 'Segoe UI', sans-serif; font-size:11px; display:inline-block;
-    margin-top:8px; padding:2px 8px; border-radius:3px; background:rgba(111,174,122,0.15); color:var(--ok); letter-spacing:0.03em;
+    margin-top:8px; padding:2px 8px; border-radius:3px; background:rgba(111,174,122,0.16); color:#3f7a4c; letter-spacing:0.03em;
   }
-  .card.warn .status-badge{background:rgba(217,138,61,0.15);color:var(--warn);}
-  .card.bad .status-badge{background:rgba(193,83,63,0.15);color:var(--bad);}
+  .card.warn .status-badge{background:rgba(217,138,61,0.16);color:#a85f1d;}
+  .card.bad .status-badge{background:rgba(193,83,63,0.16);color:#a3392a;}
   section.chart-section{
     background:var(--panel); border:1px solid var(--panel-border); border-radius:6px;
     padding:14px 14px 8px; margin-bottom:16px;
+    box-shadow:0 1px 3px rgba(36,33,27,0.06);
   }
   @media (min-width:640px){ section.chart-section{padding:20px 22px 12px;margin-bottom:22px;} }
   section.chart-section h2{ font-size:14px; font-weight:400; margin:0 0 4px; color:var(--text); line-height:1.35; }
@@ -106,7 +109,7 @@
     font-family: -apple-system, 'Segoe UI', sans-serif; font-size:12px; color:var(--text-dim);
     border-top:1px solid var(--panel-border); padding-top:16px; margin-top:12px; line-height:1.7;
   }
-  footer code{ background:#1d2a22; padding:1px 5px; border-radius:3px; color:var(--gold); }
+  footer code{ background:#efe9db; padding:1px 5px; border-radius:3px; color:var(--gold); }
 </style>
 </head>
 <body>
@@ -266,9 +269,9 @@ function renderCard({title, updated, stats, worstStatus, error}){
   document.getElementById('cards').appendChild(el);
 }
 
-Chart.defaults.color = '#9aa89e';
+Chart.defaults.color = '#756f60';
 Chart.defaults.font.family = "-apple-system, 'Segoe UI', sans-serif";
-Chart.defaults.borderColor = '#223028';
+Chart.defaults.borderColor = '#e3ddce';
 const isMobile = window.innerWidth < 640;
 if(isMobile) Chart.defaults.font.size = 10;
 const xTickLimit = isMobile ? 5 : 10;
@@ -288,8 +291,8 @@ function dualAxisChart(canvasId, labels, tempData, humData, tRange, hRange){
       responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
       plugins:{ legend:{labels:{boxWidth:10,padding:12,font:{size:isMobile?10:12}}} },
       scales:{
-        x:{ grid:{color:'#1c2621'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:xTickLimit} },
-        y:{ position:'left', title:{display:true,text:'°C'}, min:tRange[0], max:tRange[1], grid:{color:'#1c2621'} },
+        x:{ grid:{color:'#ece7db'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:xTickLimit} },
+        y:{ position:'left', title:{display:true,text:'°C'}, min:tRange[0], max:tRange[1], grid:{color:'#ece7db'} },
         y1:{ position:'right', title:{display:true,text:'%'}, min:hRange[0], max:hRange[1], grid:{display:false} }
       }
     }
@@ -305,8 +308,8 @@ function singleLineChart(canvasId, labels, data, color, yRange, yLabel){
       responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{display:false} },
       scales:{
-        x:{ grid:{color:'#1c2621'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:isMobile?6:12} },
-        y:{ min:yRange[0], max:yRange[1], title:{display:true,text:yLabel}, grid:{color:'#1c2621'} }
+        x:{ grid:{color:'#ece7db'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:isMobile?6:12} },
+        y:{ min:yRange[0], max:yRange[1], title:{display:true,text:yLabel}, grid:{color:'#ece7db'} }
       }
     }
   });
