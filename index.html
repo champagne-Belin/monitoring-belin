@@ -318,27 +318,20 @@ function dualAxisChart(canvasId, labels, tempData, humData, tRange, hRange){
   destroyChart(canvasId);
   const yOpts = { position:'left', title:{display:true,text:'°C'}, grid:{color:'#ece7db'}, ticks:{color:'#a9791f'} };
   if(tRange){ yOpts.min = tRange[0]; yOpts.max = tRange[1]; }
-  const yTempRightOpts = { position:'right', title:{display:true,text:'°C'}, grid:{display:false}, ticks:{color:'#a9791f'} };
-  if(tRange){ yTempRightOpts.min = tRange[0]; yTempRightOpts.max = tRange[1]; }
   const y1Opts = { position:'right', title:{display:true,text:'%'}, grid:{display:false}, ticks:{color:'#5f8ea8'} };
   if(hRange){ y1Opts.min = hRange[0]; y1Opts.max = hRange[1]; }
   charts[canvasId] = new Chart(document.getElementById(canvasId), {
     type:'line',
     data:{ labels, datasets:[
       { label:'Température (°C)', data:tempData, yAxisID:'y', borderColor:'#c9a24b', backgroundColor:'rgba(201,162,75,0.08)', tension:0.3, pointRadius:2, borderWidth:2, fill:true, unitSuffix:'°C' },
-      { label:'Température (miroir)', data:tempData, yAxisID:'yTempRight', borderColor:'#c9a24b', borderWidth:0, pointRadius:0, fill:false, excludeFromLegend:true, hideLabel:true },
       { label:'Humidité (%)', data:humData, yAxisID:'y1', borderColor:'#5f8ea8', backgroundColor:'rgba(95,142,168,0.06)', tension:0.3, pointRadius:2, borderWidth:2, fill:true, unitSuffix:'%' }
     ]},
     options:{
       responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
-      plugins:{
-        legend:{labels:{boxWidth:10,padding:12,font:{size:isMobile?10:12}, filter:(item,data)=> !data.datasets[item.datasetIndex].excludeFromLegend}},
-        tooltip:{filter:(item)=> !item.dataset.excludeFromLegend}
-      },
+      plugins:{ legend:{labels:{boxWidth:10,padding:12,font:{size:isMobile?10:12}}} },
       scales:{
         x:{ grid:{color:'#ece7db'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:xTickLimit} },
         y:yOpts,
-        yTempRight:yTempRightOpts,
         y1:y1Opts
       }
     }
