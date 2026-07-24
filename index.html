@@ -482,7 +482,10 @@ async function loadGyro(){
     }
 
     parsed.sort((a,b)=>a.dt-b.dt);
-    const recent = parsed.slice(-60);
+    const gyroCutoff = new Date();
+    gyroCutoff.setDate(gyroCutoff.getDate() - 4);
+    let recent = parsed.filter(r => r.dt >= gyroCutoff);
+    if(recent.length === 0) recent = parsed.slice(-60);
 
     singleLineChart('chartGyro', recent.map(r=>fmtDT(r.dt)), recent.map(r=>r.angle), '#8a733a', [0,95], '°');
 
