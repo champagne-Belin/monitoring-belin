@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitoring IoT — Champagne Belin</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg: #0f1512;
+    --panel: #161f1a;
+    --panel-border: #253028;
+    --text: #eae6da;
+    --text-dim: #9aa89e;
+    --gold: #c9a24b;
+    --ok: #6fae7a;
+    --warn: #d98a3d;
+    --bad: #c1533f;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, #1a241d 0%, transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family: 'Georgia', 'Iowan Old Style', serif;
+    padding:20px 14px 48px;
+    -webkit-text-size-adjust:100%;
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-bottom: max(48px, env(safe-area-inset-bottom));
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    border-bottom:1px solid var(--panel-border);
+    padding-bottom:14px;
+    margin-bottom:20px;
+    gap:6px;
+  }
+  header h1{ font-size:22px; font-weight:400; margin:0; color:var(--text); line-height:1.3; }
+  header h1 span{color:var(--gold);}
+  header .meta{ font-family: -apple-system, 'Segoe UI', sans-serif; font-size:12px; color:var(--text-dim); line-height:1.6; }
+  #refreshBtn{
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    font-size:12px;
+    background:transparent;
+    border:1px solid var(--panel-border);
+    color:var(--gold);
+    padding:6px 12px;
+    border-radius:5px;
+    margin-top:4px;
+    cursor:pointer;
+  }
+  @media (min-width:640px){
+    body{padding:32px 24px 64px;}
+    header{flex-direction:row;justify-content:space-between;align-items:flex-end;}
+    header h1{font-size:28px;}
+    header .meta{text-align:right;}
+  }
+  .grid{ display:grid; grid-template-columns:1fr; gap:12px; margin-bottom:26px; }
+  @media (min-width:640px){ .grid{grid-template-columns:repeat(auto-fit, minmax(260px,1fr));} }
+  .card{
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:6px;
+    padding:14px 16px; position:relative; overflow:hidden;
+  }
+  @media (min-width:640px){ .card{padding:18px 20px;} }
+  .card::before{ content:""; position:absolute; top:0; left:0; bottom:0; width:3px; background:var(--ok); }
+  .card.warn::before{background:var(--warn);}
+  .card.bad::before{background:var(--bad);}
+  .card .label{
+    font-family: -apple-system, 'Segoe UI', sans-serif; text-transform:uppercase; letter-spacing:0.12em;
+    font-size:11px; color:var(--text-dim); margin-bottom:10px;
+  }
+  .card .value-row{ display:flex; align-items:baseline; gap:18px; flex-wrap:wrap; }
+  .card .stat{display:flex;align-items:baseline;gap:5px;}
+  .card .stat .num{font-size:26px;color:var(--gold);font-variant-numeric:tabular-nums;}
+  @media (min-width:640px){ .card .stat .num{font-size:32px;} }
+  .card .stat .unit{font-size:14px;color:var(--text-dim);}
+  .card .updated{ font-family: -apple-system, 'Segoe UI', sans-serif; font-size:11px; color:var(--text-dim); margin-top:10px; }
+  .card .status-badge{
+    font-family: -apple-system, 'Segoe UI', sans-serif; font-size:11px; display:inline-block;
+    margin-top:8px; padding:2px 8px; border-radius:3px; background:rgba(111,174,122,0.15); color:var(--ok); letter-spacing:0.03em;
+  }
+  .card.warn .status-badge{background:rgba(217,138,61,0.15);color:var(--warn);}
+  .card.bad .status-badge{background:rgba(193,83,63,0.15);color:var(--bad);}
+  section.chart-section{
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:6px;
+    padding:14px 14px 8px; margin-bottom:16px;
+  }
+  @media (min-width:640px){ section.chart-section{padding:20px 22px 12px;margin-bottom:22px;} }
+  section.chart-section h2{ font-size:14px; font-weight:400; margin:0 0 4px; color:var(--text); line-height:1.35; }
+  @media (min-width:640px){ section.chart-section h2{font-size:16px;} }
+  section.chart-section .sub{ font-family: -apple-system, 'Segoe UI', sans-serif; font-size:11px; color:var(--text-dim); margin-bottom:10px; }
+  .chart-holder{position:relative;height:220px;}
+  @media (min-width:640px){ .chart-holder{height:280px;} }
+  .error-msg{
+    font-family: -apple-system, 'Segoe UI', sans-serif; font-size:12px; color:var(--bad);
+    padding:10px 0;
+  }
+  footer{
+    font-family: -apple-system, 'Segoe UI', sans-serif; font-size:12px; color:var(--text-dim);
+    border-top:1px solid var(--panel-border); padding-top:16px; margin-top:12px; line-height:1.7;
+  }
+  footer code{ background:#1d2a22; padding:1px 5px; border-radius:3px; color:var(--gold); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Monitoring <span>IoT</span> — Champagne Belin</h1>
+      <div class="meta">maisonT · Cuverie · Pression · Gyropalette</div>
+    </div>
+    <div class="meta">
+      <div id="lastUpdate">Chargement…</div>
+      <button id="refreshBtn" onclick="loadAll()">Actualiser</button>
+    </div>
+  </header>
+
+  <div class="grid" id="cards"></div>
+
+  <section class="chart-section">
+    <h2>Maison (maisonT) — Température &amp; Humidité</h2>
+    <div class="sub">Seuils : 12–30 °C · 30–90 % HR</div>
+    <div class="chart-holder"><canvas id="chartMaison"></canvas></div>
+  </section>
+
+  <section class="chart-section">
+    <h2>Cuverie — Température &amp; Humidité</h2>
+    <div class="sub">Seuils : 12–15 °C · 30–95 % HR</div>
+    <div class="chart-holder"><canvas id="chartCuverie"></canvas></div>
+  </section>
+
+  <section class="chart-section">
+    <h2>Pression circuit d'air comprimé</h2>
+    <div class="sub">Seuils : 0,8–1 bar</div>
+    <div class="chart-holder"><canvas id="chartPression"></canvas></div>
+  </section>
+
+  <section class="chart-section">
+    <h2>Gyropalette — Angle de remuage</h2>
+    <div class="sub">Cycle de remuage (0° = fin, 90° ≈ début)</div>
+    <div class="chart-holder"><canvas id="chartGyro"></canvas></div>
+  </section>
+
+  <footer>
+    Données lues en direct depuis les onglets publiés du Google Sheet <code>Monitoring IoT - Champagne Belin</code> (CSV). Appuie sur "Actualiser" pour forcer une nouvelle lecture — Google republie automatiquement le CSV à chaque modification, mais le cache peut prendre quelques minutes.
+  </footer>
+</div>
+
+<script>
+const SOURCES = {
+  maisonT:  { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=1179416058&single=true&output=csv",
+                seuils:{tMin:12,tMax:30,hMin:30,hMax:90} },
+  cuverie:  { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=724112298&single=true&output=csv",
+                seuils:{tMin:12,tMax:15,hMin:30,hMax:95,pMin:0.8,pMax:1} },
+  pression: { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?output=csv",
+                seuils:{pMin:0.8,pMax:1} },
+  gyro:     { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=1848638682&single=true&output=csv" }
+};
+
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i=0;i<text.length;i++){
+    const c = text[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (text[i+1] === '"'){ field+='"'; i++; } else { inQuotes=false; }
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ','){ row.push(field); field=''; }
+      else if (c === '\n' || c === '\r'){
+        if (c === '\r' && text[i+1]==='\n') i++;
+        row.push(field); field=''; rows.push(row); row=[];
+      } else field += c;
+    }
+  }
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(v => v !== undefined && v.trim() !== ''));
+}
+
+function toNum(s){
+  if (s==null) return NaN;
+  s = String(s).trim().replace(/\s/g,'').replace(',', '.');
+  if (s==='') return NaN;
+  return parseFloat(s);
+}
+
+function parseFRDateTime(str){
+  if(!str) return null;
+  const parts = str.trim().split(' ');
+  const datePart = parts[0], timePart = parts[1];
+  const dm = datePart.split('/').map(Number);
+  if (dm.length < 3 || dm.some(isNaN)) return null;
+  const [d,m,y] = dm;
+  let h=0,mi=0,se=0;
+  if (timePart){
+    const tp = timePart.split(':').map(Number);
+    h = tp[0]||0; mi = tp[1]||0; se = tp[2]||0;
+  }
+  return new Date(y, m-1, d, h, mi, se);
+}
+
+function fmtDT(dt){
+  if(!dt) return '';
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(dt.getDate())}/${pad(dt.getMonth()+1)} ${pad(dt.getHours())}h${pad(dt.getMinutes())}`;
+}
+
+async function fetchCSV(url){
+  const res = await fetch(url, {cache:'no-store'});
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const text = await res.text();
+  return parseCSV(text);
+}
+
+function downsample(arr, target){
+  if(arr.length <= target) return arr;
+  const step = arr.length / target;
+  const out = [];
+  for(let i=0;i<target;i++){ out.push(arr[Math.floor(i*step)]); }
+  out.push(arr[arr.length-1]);
+  return out;
+}
+
+function statusFor(val, min, max){
+  if(val==null || isNaN(val)) return 'unknown';
+  if(val < min || val > max) return 'bad';
+  const margin = (max-min)*0.1;
+  if(val < min+margin || val > max-margin) return 'warn';
+  return 'ok';
+}
+function worstOf(list){
+  if(list.includes('bad')) return 'bad';
+  if(list.includes('warn')) return 'warn';
+  if(list.includes('unknown')) return 'unknown';
+  return 'ok';
+}
+function badgeLabel(s){
+  return s==='ok' ? 'Dans les seuils' : s==='warn' ? 'Proche du seuil' : s==='bad' ? 'Hors seuil' : 'Donnée indisponible';
+}
+
+function renderCard({title, updated, stats, worstStatus, error}){
+  const el = document.createElement('div');
+  el.className = 'card ' + (worstStatus === 'ok' ? '' : worstStatus);
+  if(error){
+    el.innerHTML = `<div class="label">${title}</div><div class="error-msg">Chargement impossible : ${error}</div>`;
+  } else {
+    el.innerHTML = `
+      <div class="label">${title}</div>
+      <div class="value-row">
+        ${stats.map(s => `<div class="stat"><span class="num">${s.value}</span><span class="unit">${s.unit}</span></div>`).join('')}
+      </div>
+      <div class="status-badge">${badgeLabel(worstStatus)}</div>
+      <div class="updated">Dernière lecture : ${updated}</div>
+    `;
+  }
+  document.getElementById('cards').appendChild(el);
+}
+
+Chart.defaults.color = '#9aa89e';
+Chart.defaults.font.family = "-apple-system, 'Segoe UI', sans-serif";
+Chart.defaults.borderColor = '#223028';
+const isMobile = window.innerWidth < 640;
+if(isMobile) Chart.defaults.font.size = 10;
+const xTickLimit = isMobile ? 5 : 10;
+
+let charts = {};
+function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
+
+function dualAxisChart(canvasId, labels, tempData, humData, tRange, hRange){
+  destroyChart(canvasId);
+  charts[canvasId] = new Chart(document.getElementById(canvasId), {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'Température (°C)', data:tempData, yAxisID:'y', borderColor:'#c9a24b', backgroundColor:'rgba(201,162,75,0.08)', tension:0.3, pointRadius:2, borderWidth:2, fill:true },
+      { label:'Humidité (%)', data:humData, yAxisID:'y1', borderColor:'#5f8ea8', backgroundColor:'rgba(95,142,168,0.06)', tension:0.3, pointRadius:2, borderWidth:2, fill:true }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
+      plugins:{ legend:{labels:{boxWidth:10,padding:12,font:{size:isMobile?10:12}}} },
+      scales:{
+        x:{ grid:{color:'#1c2621'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:xTickLimit} },
+        y:{ position:'left', title:{display:true,text:'°C'}, min:tRange[0], max:tRange[1], grid:{color:'#1c2621'} },
+        y1:{ position:'right', title:{display:true,text:'%'}, min:hRange[0], max:hRange[1], grid:{display:false} }
+      }
+    }
+  });
+}
+
+function singleLineChart(canvasId, labels, data, color, yRange, yLabel){
+  destroyChart(canvasId);
+  charts[canvasId] = new Chart(document.getElementById(canvasId), {
+    type:'line',
+    data:{ labels, datasets:[{ label:yLabel, data, borderColor:color, backgroundColor:color+'22', tension:0.25, pointRadius:0, borderWidth:2, fill:true }] },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ grid:{color:'#1c2621'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:isMobile?6:12} },
+        y:{ min:yRange[0], max:yRange[1], title:{display:true,text:yLabel}, grid:{color:'#1c2621'} }
+      }
+    }
+  });
+}
+
+async function loadMaisonOrCuverie(key, canvasId, hasPressure){
+  const src = SOURCES[key];
+  try{
+    const rows = await fetchCSV(src.url);
+    const header = rows[0].map(h => h.toLowerCase());
+    const dateIdx = 0;
+    let tempIdx = header.findIndex(h => h.includes('temp'));
+    let humIdx = header.findIndex(h => h.includes('humid'));
+    let presIdx = hasPressure ? header.findIndex(h => h.includes('pression')) : -1;
+    if(tempIdx<0) tempIdx = 2;
+    if(humIdx<0) humIdx = 3;
+
+    const parsed = rows.slice(1).map(r => ({
+      dt: parseFRDateTime(r[dateIdx]),
+      temp: toNum(r[tempIdx]),
+      hum: toNum(r[humIdx]),
+      pres: presIdx>=0 ? toNum(r[presIdx]) : null
+    })).filter(r => r.dt && !isNaN(r.temp));
+
+    parsed.sort((a,b) => a.dt - b.dt);
+    const recent = parsed.slice(-30);
+
+    dualAxisChart(canvasId, recent.map(r=>fmtDT(r.dt)), recent.map(r=>r.temp), recent.map(r=>r.hum),
+      key==='maisonT' ? [10,32] : [10,20], key==='maisonT' ? [30,80] : [30,100]);
+
+    const last = parsed[parsed.length-1];
+    const sT = statusFor(last.temp, src.seuils.tMin, src.seuils.tMax);
+    const sH = statusFor(last.hum, src.seuils.hMin, src.seuils.hMax);
+    const stats = [{value:last.temp.toFixed(1),unit:'°C'},{value:last.hum!=null?last.hum.toFixed(1):'—',unit:'% HR'}];
+    let worst = worstOf([sT,sH]);
+    if(hasPressure && last.pres!=null && !isNaN(last.pres)){
+      const sP = statusFor(last.pres, src.seuils.pMin, src.seuils.pMax);
+      stats.push({value:last.pres.toFixed(3),unit:'bar'});
+      worst = worstOf([worst, sP]);
+    }
+    renderCard({ title: key==='maisonT' ? 'Maison (maisonT)' : 'Cuverie', updated: fmtDT(last.dt), stats, worstStatus: worst });
+  } catch(e){
+    renderCard({ title: key==='maisonT' ? 'Maison (maisonT)' : 'Cuverie', error: e.message, worstStatus:'bad' });
+    document.querySelector('#'+canvasId).closest('section').querySelector('.sub').textContent = 'Données indisponibles pour le moment.';
+  }
+}
+
+async function loadPression(){
+  const src = SOURCES.pression;
+  try{
+    const rows = await fetchCSV(src.url);
+    const header = rows[0].map(h => h.toLowerCase());
+    let presIdx = header.findIndex(h => h.includes('pression'));
+    if(presIdx<0) presIdx = 1;
+    const parsed = rows.slice(1).map(r => ({ dt: parseFRDateTime(r[0]), pres: toNum(r[presIdx]) }))
+      .filter(r => r.dt && !isNaN(r.pres));
+    parsed.sort((a,b)=>a.dt-b.dt);
+    const sample = downsample(parsed, 120);
+
+    singleLineChart('chartPression', sample.map(r=>fmtDT(r.dt)), sample.map(r=>r.pres), '#c1533f', [0.75,0.98], 'bar');
+
+    const last = parsed[parsed.length-1];
+    const s = statusFor(last.pres, src.seuils.pMin, src.seuils.pMax);
+    renderCard({ title:'Pression circuit (live)', updated: fmtDT(last.dt), stats:[{value:last.pres.toFixed(3),unit:'bar'}], worstStatus:s });
+  } catch(e){
+    renderCard({ title:'Pression circuit (live)', error:e.message, worstStatus:'bad' });
+  }
+}
+
+async function loadGyro(){
+  try{
+    const rows = await fetchCSV(SOURCES.gyro.url);
+    const header = rows[0].map(h => h.toLowerCase());
+    const dtIdx = header.findIndex(h => h.includes('horodatage'));
+    const angleIdx = header.findIndex(h => h.includes('angle'));
+    const phaseIdx = header.findIndex(h => h.includes('phase'));
+    const elapsedIdx = header.findIndex(h => h.includes('temps_ecoule') || h.includes('temps ecoule'));
+
+    const parsed = rows.slice(1).map(r => ({
+      dt: parseFRDateTime(r[dtIdx>=0?dtIdx:1]),
+      angle: toNum(r[angleIdx>=0?angleIdx:4]),
+      phase: (r[phaseIdx>=0?phaseIdx:3]||'').trim(),
+      elapsed: toNum(r[elapsedIdx>=0?elapsedIdx:2])
+    })).filter(r => r.dt && !isNaN(r.angle));
+
+    parsed.sort((a,b)=>a.dt-b.dt);
+    const recent = parsed.slice(-60);
+
+    singleLineChart('chartGyro', recent.map(r=>fmtDT(r.dt)), recent.map(r=>r.angle), '#8a733a', [0,95], '°');
+
+    const last = parsed[parsed.length-1];
+    renderCard({
+      title:'Gyropalette',
+      updated: fmtDT(last.dt),
+      stats:[{value:last.angle.toFixed(1),unit:'°'},{value:last.phase||'—',unit:''}],
+      worstStatus:'ok'
+    });
+  } catch(e){
+    renderCard({ title:'Gyropalette', error:e.message, worstStatus:'bad' });
+  }
+}
+
+async function loadAll(){
+  document.getElementById('cards').innerHTML = '';
+  document.getElementById('lastUpdate').textContent = 'Chargement…';
+  await Promise.allSettled([
+    loadMaisonOrCuverie('maisonT', 'chartMaison', false),
+    loadMaisonOrCuverie('cuverie', 'chartCuverie', true),
+    loadPression(),
+    loadGyro()
+  ]);
+  const now = new Date();
+  document.getElementById('lastUpdate').textContent = 'Actualisé à ' + now.toLocaleTimeString('fr-FR');
+}
+
+loadAll();
+</script>
+</body>
+</html>
