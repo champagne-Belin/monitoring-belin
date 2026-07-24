@@ -130,13 +130,13 @@
 
   <section class="chart-section">
     <h2>Maison (maisonT) — Température &amp; Humidité</h2>
-    <div class="sub">Seuils : 12–30 °C · 30–90 % HR</div>
+    <div class="sub">15 derniers jours · échelle auto sur les valeurs</div>
     <div class="chart-holder"><canvas id="chartMaison"></canvas></div>
   </section>
 
   <section class="chart-section">
     <h2>Cuverie — Température &amp; Humidité</h2>
-    <div class="sub">Seuils : 12–15 °C · 30–95 % HR</div>
+    <div class="sub">15 derniers jours · échelle auto sur les valeurs</div>
     <div class="chart-holder"><canvas id="chartCuverie"></canvas></div>
   </section>
 
@@ -159,7 +159,7 @@
 
 <script>
 const SOURCES = {
-  maisonT:  { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?output=csv",
+  maisonT:  { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=1821799987&single=true&output=csv",
                 seuils:{tMin:12,tMax:30,hMin:30,hMax:90} },
   cuverie:  { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=724112298&single=true&output=csv",
                 seuils:{tMin:12,tMax:15,hMin:30,hMax:95,pMin:0.8,pMax:1} },
@@ -281,6 +281,10 @@ function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[i
 
 function dualAxisChart(canvasId, labels, tempData, humData, tRange, hRange){
   destroyChart(canvasId);
+  const yOpts = { position:'left', title:{display:true,text:'°C'}, grid:{color:'#ece7db'} };
+  if(tRange){ yOpts.min = tRange[0]; yOpts.max = tRange[1]; }
+  const y1Opts = { position:'right', title:{display:true,text:'%'}, grid:{display:false} };
+  if(hRange){ y1Opts.min = hRange[0]; y1Opts.max = hRange[1]; }
   charts[canvasId] = new Chart(document.getElementById(canvasId), {
     type:'line',
     data:{ labels, datasets:[
@@ -292,8 +296,8 @@ function dualAxisChart(canvasId, labels, tempData, humData, tRange, hRange){
       plugins:{ legend:{labels:{boxWidth:10,padding:12,font:{size:isMobile?10:12}}} },
       scales:{
         x:{ grid:{color:'#ece7db'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:xTickLimit} },
-        y:{ position:'left', title:{display:true,text:'°C'}, min:tRange[0], max:tRange[1], grid:{color:'#ece7db'} },
-        y1:{ position:'right', title:{display:true,text:'%'}, min:hRange[0], max:hRange[1], grid:{display:false} }
+        y:yOpts,
+        y1:y1Opts
       }
     }
   });
@@ -323,11 +327,25 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
     const dateIdx = 0;
     let tempIdx = header.findIndex(h => h.includes('temp'));
     let humIdx = header.findIndex(h => h.includes('humid'));
+    let sondeIdx = header.findIndex(h => h.includes('sonde'));
     let presIdx = hasPressure ? header.findIndex(h => h.includes('pression')) : -1;
     if(tempIdx<0) tempIdx = 2;
     if(humIdx<0) humIdx = 3;
 
-    const parsed = rows.slice(1).map(r => ({
+    // Mots-clés attendus dans la colonne Sonde pour ne garder que les lignes de cette source
+    const sondeKeywords = { maisonT: ['maisont'], cuverie: ['cuverie'] };
+    const wanted = sondeKeywords[key] || [];
+
+    let dataRows = rows.slice(1);
+    if(sondeIdx >= 0 && wanted.length){
+      const filtered = dataRows.filter(r => {
+        const s = (r[sondeIdx] || '').toLowerCase().trim();
+        return wanted.some(w => s === w || s.includes(w));
+      });
+      if(filtered.length > 0) dataRows = filtered;
+    }
+
+    const parsed = dataRows.map(r => ({
       dt: parseFRDateTime(r[dateIdx]),
       temp: toNum(r[tempIdx]),
       hum: toNum(r[humIdx]),
@@ -335,14 +353,21 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
     })).filter(r => r.dt && !isNaN(r.temp));
 
     if(parsed.length === 0){
-      throw new Error(`Aucune ligne exploitable. En-tête détecté : [${rows[0].join(' | ')}]. Vérifie que c'est le bon onglet (attendu: Date, Sonde, Température, Humidité).`);
+      let hint = `En-tête détecté : [${rows[0].join(' | ')}].`;
+      if(sondeIdx >= 0){
+        const distinctSondes = [...new Set(rows.slice(1).map(r => (r[sondeIdx]||'').trim()).filter(Boolean))];
+        hint += ` Valeurs de "Sonde" trouvées : [${distinctSondes.join(', ')}].`;
+      }
+      throw new Error(`Aucune ligne exploitable. ${hint}`);
     }
 
     parsed.sort((a,b) => a.dt - b.dt);
-    const recent = parsed.slice(-30);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 15);
+    let recent = parsed.filter(r => r.dt >= cutoff);
+    if(recent.length === 0) recent = parsed.slice(-30);
 
-    dualAxisChart(canvasId, recent.map(r=>fmtDT(r.dt)), recent.map(r=>r.temp), recent.map(r=>r.hum),
-      key==='maisonT' ? [10,32] : [10,20], key==='maisonT' ? [30,80] : [30,100]);
+    dualAxisChart(canvasId, recent.map(r=>fmtDT(r.dt)), recent.map(r=>r.temp), recent.map(r=>r.hum), null, null);
 
     const last = parsed[parsed.length-1];
     const sT = statusFor(last.temp, src.seuils.tMin, src.seuils.tMax);
