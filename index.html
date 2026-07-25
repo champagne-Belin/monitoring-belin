@@ -188,6 +188,7 @@ async function fetchConfig(){
   const humMinIdx = idx('HumMin'), humMaxIdx = idx('HumMax');
   const presMinIdx = idx('PressionMin'), presMaxIdx = idx('PressionMax');
   const dateLiveIdx = idx('DateLive'), presLiveIdx = idx('PressionLive'), tempLiveIdx = idx('TemperatureLive');
+  const humLiveIdx = idx('HumiditeLive');
   const map = {};
   rows.slice(1).forEach(r => {
     const mod = (r[moduleIdx]||'').trim().toLowerCase();
@@ -198,7 +199,8 @@ async function fetchConfig(){
       presMin: toNum(r[presMinIdx]), presMax: toNum(r[presMaxIdx]),
       dateLive: parseFRDateTime(r[dateLiveIdx]),
       presLive: toNum(r[presLiveIdx]),
-      tempLive: toNum(r[tempLiveIdx])
+      tempLive: toNum(r[tempLiveIdx]),
+      humLive: humLiveIdx>=0 ? toNum(r[humLiveIdx]) : NaN
     };
   });
   configCache = map;
@@ -415,12 +417,18 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
     const wanted = sondeKeywords[key] || [];
 
     let dataRows = rows.slice(1);
+    let sondeFilterFailed = false;
     if(sondeIdx >= 0 && wanted.length){
       const filtered = dataRows.filter(r => {
         const s = (r[sondeIdx] || '').toLowerCase().trim();
         return wanted.some(w => s === w || s.includes(w));
       });
-      if(filtered.length > 0) dataRows = filtered;
+      if(filtered.length > 0){
+        dataRows = filtered;
+      } else {
+        sondeFilterFailed = true;
+        dataRows = [];
+      }
     }
 
     const parsed = dataRows.map(r => ({
@@ -430,7 +438,7 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
       pres: presIdx>=0 ? toNum(r[presIdx]) : null
     })).filter(r => r.dt && !isNaN(r.temp));
 
-    if(parsed.length === 0){
+    if(parsed.length === 0 || sondeFilterFailed){
       let hint = `En-tête détecté : [${rows[0].join(' | ')}].`;
       if(sondeIdx >= 0){
         const distinctSondes = [...new Set(rows.slice(1).map(r => (r[sondeIdx]||'').trim()).filter(Boolean))];
@@ -566,9 +574,15 @@ async function loadTempOnlyCard(key){
     const sondeIdx = header.findIndex(h => h.includes('sonde'));
 
     let dataRows = rows.slice(1);
+    let sondeFilterFailed = false;
     if(sondeIdx >= 0){
       const filtered = dataRows.filter(r => (r[sondeIdx]||'').toLowerCase().trim().includes(key));
-      if(filtered.length > 0) dataRows = filtered;
+      if(filtered.length > 0){
+        dataRows = filtered;
+      } else {
+        sondeFilterFailed = true;
+        dataRows = [];
+      }
     }
 
     const parsed = dataRows.map(r => ({
@@ -577,7 +591,7 @@ async function loadTempOnlyCard(key){
       hum: toNum(r[humIdx>=0?humIdx:3])
     })).filter(r => r.dt && !isNaN(r.temp));
 
-    if(parsed.length === 0){
+    if(parsed.length === 0 || sondeFilterFailed){
       let hint = `En-tête détecté : [${rows[0].join(' | ')}].`;
       if(sondeIdx >= 0){
         const distinctSondes = [...new Set(rows.slice(1).map(r => (r[sondeIdx]||'').trim()).filter(Boolean))];
@@ -590,6 +604,7 @@ async function loadTempOnlyCard(key){
     const last = parsed[parsed.length-1];
 
     let cardTemp = last.temp, cardDate = last.dt, tMin = src.tMin, tMax = src.tMax;
+    let cardHum = last.hum;
     try{
       const cfg = await fetchConfig();
       const modCfg = cfg[key];
@@ -599,11 +614,14 @@ async function loadTempOnlyCard(key){
         if(!isNaN(modCfg.tempMin)) tMin = modCfg.tempMin;
         if(!isNaN(modCfg.tempMax)) tMax = modCfg.tempMax;
       }
-    } catch(e){ /* si Config indisponible, on garde la valeur de l'historique */ }
+      if(modCfg && !isNaN(modCfg.humLive)){
+        cardHum = modCfg.humLive;
+      }
+    } catch(e){ /* si Config indisponible, on garde les valeurs de l'historique */ }
 
     const status = statusFor(cardTemp, tMin, tMax);
     const stats = [{value:cardTemp.toFixed(1),unit:'°C'}];
-    if(!isNaN(last.hum)) stats.push({value:last.hum.toFixed(1),unit:'% HR'});
+    if(!isNaN(cardHum)) stats.push({value:cardHum.toFixed(1),unit:'% HR'});
     renderCard({ title:src.label, updated: fmtDT(cardDate), stats, worstStatus: status });
   } catch(e){
     renderCard({ title:src.label, error:e.message, worstStatus:'bad' });
