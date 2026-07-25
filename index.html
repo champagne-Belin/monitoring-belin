@@ -175,6 +175,36 @@ const TEMP_ONLY_SOURCES = {
   habillage: { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=506062816&single=true&output=csv", label:"Habillage", tMin:12, tMax:28 }
 };
 
+// Onglet Config : une ligne par module, avec seuils et valeurs Live (DateLive / PressionLive / TemperatureLive)
+const CONFIG_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=175564844&single=true&output=csv";
+let configCache = null;
+async function fetchConfig(){
+  if(configCache) return configCache;
+  const rows = await fetchCSV(CONFIG_URL);
+  const header = rows[0].map(h => h.trim());
+  const idx = name => header.findIndex(h => h.toLowerCase() === name.toLowerCase());
+  const moduleIdx = idx('Module');
+  const tempMinIdx = idx('TempMin'), tempMaxIdx = idx('TempMax');
+  const humMinIdx = idx('HumMin'), humMaxIdx = idx('HumMax');
+  const presMinIdx = idx('PressionMin'), presMaxIdx = idx('PressionMax');
+  const dateLiveIdx = idx('DateLive'), presLiveIdx = idx('PressionLive'), tempLiveIdx = idx('TemperatureLive');
+  const map = {};
+  rows.slice(1).forEach(r => {
+    const mod = (r[moduleIdx]||'').trim().toLowerCase();
+    if(!mod) return;
+    map[mod] = {
+      tempMin: toNum(r[tempMinIdx]), tempMax: toNum(r[tempMaxIdx]),
+      humMin: toNum(r[humMinIdx]), humMax: toNum(r[humMaxIdx]),
+      presMin: toNum(r[presMinIdx]), presMax: toNum(r[presMaxIdx]),
+      dateLive: parseFRDateTime(r[dateLiveIdx]),
+      presLive: toNum(r[presLiveIdx]),
+      tempLive: toNum(r[tempLiveIdx])
+    };
+  });
+  configCache = map;
+  return map;
+}
+
 function parseCSV(text){
   const rows = [];
   let row = [], field = '', inQuotes = false;
@@ -460,8 +490,20 @@ async function loadPression(){
     singleLineChart('chartPression', sample.map(r=>fmtDateOnly(r.dt)), sample.map(r=>r.pres), '#c1533f', [0.75,0.98], 'bar');
 
     const last = parsed[parsed.length-1];
-    const s = statusFor(last.pres, src.seuils.pMin, src.seuils.pMax);
-    renderCard({ title:'Pression circuit (live)', updated: fmtDT(last.dt), stats:[{value:last.pres.toFixed(3),unit:'bar'}], worstStatus:s });
+    let cardValue = last.pres, cardDate = last.dt, pMin = src.seuils.pMin, pMax = src.seuils.pMax;
+    try{
+      const cfg = await fetchConfig();
+      const cuverieCfg = cfg['cuverie'];
+      if(cuverieCfg && cuverieCfg.dateLive && !isNaN(cuverieCfg.presLive)){
+        cardValue = cuverieCfg.presLive;
+        cardDate = cuverieCfg.dateLive;
+        if(!isNaN(cuverieCfg.presMin)) pMin = cuverieCfg.presMin;
+        if(!isNaN(cuverieCfg.presMax)) pMax = cuverieCfg.presMax;
+      }
+    } catch(e){ /* si Config indisponible, on garde la valeur du journal */ }
+
+    const s = statusFor(cardValue, pMin, pMax);
+    renderCard({ title:'Pression circuit (live)', updated: fmtDT(cardDate), stats:[{value:cardValue.toFixed(3),unit:'bar'}], worstStatus:s });
   } catch(e){
     renderCard({ title:'Pression circuit (live)', error:e.message, worstStatus:'bad' });
   }
@@ -546,10 +588,23 @@ async function loadTempOnlyCard(key){
 
     parsed.sort((a,b)=>a.dt-b.dt);
     const last = parsed[parsed.length-1];
-    const status = statusFor(last.temp, src.tMin, src.tMax);
-    const stats = [{value:last.temp.toFixed(1),unit:'°C'}];
+
+    let cardTemp = last.temp, cardDate = last.dt, tMin = src.tMin, tMax = src.tMax;
+    try{
+      const cfg = await fetchConfig();
+      const modCfg = cfg[key];
+      if(modCfg && modCfg.dateLive && !isNaN(modCfg.tempLive)){
+        cardTemp = modCfg.tempLive;
+        cardDate = modCfg.dateLive;
+        if(!isNaN(modCfg.tempMin)) tMin = modCfg.tempMin;
+        if(!isNaN(modCfg.tempMax)) tMax = modCfg.tempMax;
+      }
+    } catch(e){ /* si Config indisponible, on garde la valeur de l'historique */ }
+
+    const status = statusFor(cardTemp, tMin, tMax);
+    const stats = [{value:cardTemp.toFixed(1),unit:'°C'}];
     if(!isNaN(last.hum)) stats.push({value:last.hum.toFixed(1),unit:'% HR'});
-    renderCard({ title:src.label, updated: fmtDT(last.dt), stats, worstStatus: status });
+    renderCard({ title:src.label, updated: fmtDT(cardDate), stats, worstStatus: status });
   } catch(e){
     renderCard({ title:src.label, error:e.message, worstStatus:'bad' });
   }
