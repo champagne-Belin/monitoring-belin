@@ -74,6 +74,7 @@
   .card::before{ content:""; position:absolute; top:0; left:0; bottom:0; width:3px; background:var(--ok); }
   .card.warn::before{background:var(--warn);}
   .card.bad::before{background:var(--bad);}
+  .card.unknown::before{background:var(--text-dim);}
   .card .label{
     font-family: -apple-system, 'Segoe UI', sans-serif; text-transform:uppercase; letter-spacing:0.12em;
     font-size:11px; color:var(--text-dim); margin-bottom:10px;
@@ -168,6 +169,12 @@ const SOURCES = {
   gyro:     { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=1848638682&single=true&output=csv" }
 };
 
+// Salles supplémentaires : carte "température live" simple (pas de graphique), en attente du lien CSV publié
+const TEMP_ONLY_SOURCES = {
+  cave:      { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=2018936746&single=true&output=csv", label:"Cave", tMin:10, tMax:18 },
+  habillage: { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=506062816&single=true&output=csv", label:"Habillage", tMin:12, tMax:28 }
+};
+
 function parseCSV(text){
   const rows = [];
   let row = [], field = '', inQuotes = false;
@@ -216,6 +223,12 @@ function fmtDT(dt){
   if(!dt) return '';
   const pad = n => String(n).padStart(2,'0');
   return `${pad(dt.getDate())}/${pad(dt.getMonth()+1)} ${pad(dt.getHours())}h${pad(dt.getMinutes())}`;
+}
+
+function fmtDateOnly(dt){
+  if(!dt) return '';
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(dt.getDate())}/${pad(dt.getMonth()+1)}`;
 }
 
 async function fetchCSV(url){
@@ -402,7 +415,7 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
     let recent = parsed.filter(r => r.dt >= cutoff);
     if(recent.length === 0) recent = parsed.slice(-30);
 
-    dualAxisChart(canvasId, recent.map(r=>fmtDT(r.dt)), recent.map(r=>r.temp), recent.map(r=>r.hum), null, null);
+    dualAxisChart(canvasId, recent.map(r=>fmtDateOnly(r.dt)), recent.map(r=>r.temp), recent.map(r=>r.hum), null, null);
 
     const last = parsed[parsed.length-1];
     const sT = statusFor(last.temp, src.seuils.tMin, src.seuils.tMax);
@@ -444,7 +457,7 @@ async function loadPression(){
     parsed.sort((a,b)=>a.dt-b.dt);
     const sample = downsample(parsed, 120);
 
-    singleLineChart('chartPression', sample.map(r=>fmtDT(r.dt)), sample.map(r=>r.pres), '#c1533f', [0.75,0.98], 'bar');
+    singleLineChart('chartPression', sample.map(r=>fmtDateOnly(r.dt)), sample.map(r=>r.pres), '#c1533f', [0.75,0.98], 'bar');
 
     const last = parsed[parsed.length-1];
     const s = statusFor(last.pres, src.seuils.pMin, src.seuils.pMax);
@@ -480,17 +493,65 @@ async function loadGyro(){
     let recent = parsed.filter(r => r.dt >= gyroCutoff);
     if(recent.length === 0) recent = parsed.slice(-60);
 
-    singleLineChart('chartGyro', recent.map(r=>fmtDT(r.dt)), recent.map(r=>r.angle), '#8a733a', [0,95], '°');
+    singleLineChart('chartGyro', recent.map(r=>fmtDateOnly(r.dt)), recent.map(r=>r.angle), '#8a733a', [0,95], '°');
 
     const last = parsed[parsed.length-1];
+    const phaseIsText = last.phase && isNaN(toNum(last.phase));
+    const gyroStats = [{value:last.angle.toFixed(1),unit:'°'}];
+    if(phaseIsText) gyroStats.push({value:last.phase,unit:''});
     renderCard({
       title:'Gyropalette',
       updated: fmtDT(last.dt),
-      stats:[{value:last.angle.toFixed(1),unit:'°'},{value:last.phase||'—',unit:''}],
+      stats: gyroStats,
       worstStatus:'ok'
     });
   } catch(e){
     renderCard({ title:'Gyropalette', error:e.message, worstStatus:'bad' });
+  }
+}
+
+async function loadTempOnlyCard(key){
+  const src = TEMP_ONLY_SOURCES[key];
+  if(!src.url){
+    renderCard({ title:src.label, error:"lien CSV non encore renseigné pour cet onglet.", worstStatus:'unknown' });
+    return;
+  }
+  try{
+    const rows = await fetchCSV(src.url);
+    const header = rows[0].map(h => h.toLowerCase());
+    const tempIdx = header.findIndex(h => h.includes('temp'));
+    const humIdx = header.findIndex(h => h.includes('humid'));
+    const sondeIdx = header.findIndex(h => h.includes('sonde'));
+
+    let dataRows = rows.slice(1);
+    if(sondeIdx >= 0){
+      const filtered = dataRows.filter(r => (r[sondeIdx]||'').toLowerCase().trim().includes(key));
+      if(filtered.length > 0) dataRows = filtered;
+    }
+
+    const parsed = dataRows.map(r => ({
+      dt: parseFRDateTime(r[0]),
+      temp: toNum(r[tempIdx>=0?tempIdx:2]),
+      hum: toNum(r[humIdx>=0?humIdx:3])
+    })).filter(r => r.dt && !isNaN(r.temp));
+
+    if(parsed.length === 0){
+      let hint = `En-tête détecté : [${rows[0].join(' | ')}].`;
+      if(sondeIdx >= 0){
+        const distinctSondes = [...new Set(rows.slice(1).map(r => (r[sondeIdx]||'').trim()).filter(Boolean))];
+        hint += ` Valeurs de "Sonde" trouvées : [${distinctSondes.join(', ')}].`;
+      }
+      throw new Error(`Aucune ligne exploitable. ${hint}`);
+    }
+
+    parsed.sort((a,b)=>a.dt-b.dt);
+    const last = parsed[parsed.length-1];
+    const status = statusFor(last.temp, src.tMin, src.tMax);
+    const stats = [{value:last.temp.toFixed(1),unit:'°C'}];
+    if(!isNaN(last.hum)) stats.push({value:last.hum.toFixed(1),unit:'% HR'});
+    renderCard({ title:src.label, updated: fmtDT(last.dt), stats, worstStatus: status });
+  } catch(e){
+    renderCard({ title:src.label, error:e.message, worstStatus:'bad' });
   }
 }
 
@@ -501,7 +562,9 @@ async function loadAll(){
     loadMaisonOrCuverie('maisonT', 'chartMaison', false),
     loadMaisonOrCuverie('cuverie', 'chartCuverie', true),
     loadPression(),
-    loadGyro()
+    loadGyro(),
+    loadTempOnlyCard('cave'),
+    loadTempOnlyCard('habillage')
   ]);
   const now = new Date();
   document.getElementById('lastUpdate').textContent = 'Actualisé à ' + now.toLocaleTimeString('fr-FR');
