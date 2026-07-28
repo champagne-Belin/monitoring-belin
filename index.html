@@ -85,6 +85,7 @@
   @media (min-width:640px){ .card .stat .num{font-size:32px;} }
   .card .stat .unit{font-size:14px;color:var(--text-dim);}
   .card .updated{ font-family: -apple-system, 'Segoe UI', sans-serif; font-size:11px; color:var(--text-dim); margin-top:10px; }
+  .mini-chart-holder{ position:relative; height:70px; margin-top:10px; }
   .card .status-badge{
     font-family: -apple-system, 'Segoe UI', sans-serif; font-size:11px; display:inline-block;
     margin-top:8px; padding:2px 8px; border-radius:3px; background:rgba(111,174,122,0.16); color:#3f7a4c; letter-spacing:0.03em;
@@ -127,7 +128,14 @@
     </div>
   </header>
 
-  <div class="grid" id="cards"></div>
+  <div class="grid" id="cards">
+    <div class="card" id="card-cuverie"><div class="label">Cuverie</div></div>
+    <div class="card" id="card-cave"><div class="label">Cave</div></div>
+    <div class="card" id="card-habillage"><div class="label">Habillage</div></div>
+    <div class="card unknown" id="card-maison"><div class="label">Maison</div><div class="error-msg">Onglet pas encore connecté.</div></div>
+    <div class="card" id="card-maisonT"><div class="label">Maison (maisonT)</div></div>
+    <div class="card" id="card-gyro"><div class="label">Gyropalette</div></div>
+  </div>
 
   <section class="chart-section">
     <h2 id="h2Maison">Maison (maisonT) — Température &amp; Humidité</h2>
@@ -296,8 +304,9 @@ function badgeLabel(s){
   return s==='ok' ? 'Dans les seuils' : s==='warn' ? 'Proche du seuil' : s==='bad' ? 'Hors seuil' : 'Donnée indisponible';
 }
 
-function renderCard({title, updated, stats, worstStatus, error}){
-  const el = document.createElement('div');
+function renderCard({title, updated, stats, worstStatus, error, chartId, targetId}){
+  const el = document.getElementById(targetId);
+  if(!el) return;
   el.className = 'card ' + (worstStatus === 'ok' ? '' : worstStatus);
   if(error){
     el.innerHTML = `<div class="label">${title}</div><div class="error-msg">Chargement impossible : ${error}</div>`;
@@ -310,9 +319,9 @@ function renderCard({title, updated, stats, worstStatus, error}){
       </div>
       <div class="status-badge">${badgeLabel(worstStatus)}</div>
       <div class="updated">Dernière lecture : ${updated}</div>
+      ${chartId ? `<div class="mini-chart-holder"><canvas id="${chartId}"></canvas></div>` : ''}
     `;
   }
-  document.getElementById('cards').appendChild(el);
 }
 
 // Plugin : affiche la dernière valeur directement sur la courbe
@@ -399,6 +408,30 @@ function singleLineChart(canvasId, labels, data, color, yRange, yLabel){
   });
 }
 
+// Mini-graphique compact intégré à une carte : pas d'axes, juste la tendance + dernière valeur
+function miniChart(canvasId, labels, tempData, humData){
+  destroyChart(canvasId);
+  const datasets = [
+    { label:'Température (°C)', data:tempData, yAxisID:'y', borderColor:'#c9a24b', backgroundColor:'rgba(201,162,75,0.08)', tension:0.3, pointRadius:0, borderWidth:2, fill:true, unitSuffix:'°C' }
+  ];
+  if(humData){
+    datasets.push({ label:'Humidité (%)', data:humData, yAxisID:'y1', borderColor:'#5f8ea8', backgroundColor:'rgba(95,142,168,0.06)', tension:0.3, pointRadius:0, borderWidth:2, fill:true, unitSuffix:'%' });
+  }
+  charts[canvasId] = new Chart(document.getElementById(canvasId), {
+    type:'line',
+    data:{ labels, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ display:false },
+        y:{ display:false },
+        y1:{ display:false }
+      }
+    }
+  });
+}
+
 async function loadMaisonOrCuverie(key, canvasId, hasPressure){
   const src = SOURCES[key];
   try{
@@ -460,12 +493,26 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
     const sH = statusFor(last.hum, src.seuils.hMin, src.seuils.hMax);
     const stats = [{value:last.temp.toFixed(1),unit:'°C'},{value:last.hum!=null?last.hum.toFixed(1):'—',unit:'% HR'}];
     let worst = worstOf([sT,sH]);
-    if(hasPressure && last.pres!=null && !isNaN(last.pres)){
-      const sP = statusFor(last.pres, src.seuils.pMin, src.seuils.pMax);
-      stats.push({value:last.pres.toFixed(3),unit:'bar'});
-      worst = worstOf([worst, sP]);
+    if(hasPressure){
+      let presValue = last.pres, presDate = last.dt, pMin = src.seuils.pMin, pMax = src.seuils.pMax;
+      try{
+        const cfg = await fetchConfig();
+        const cuverieCfg = cfg['cuverie'];
+        if(cuverieCfg && cuverieCfg.dateLive && !isNaN(cuverieCfg.presLive)){
+          presValue = cuverieCfg.presLive;
+          presDate = cuverieCfg.dateLive;
+          if(!isNaN(cuverieCfg.presMin)) pMin = cuverieCfg.presMin;
+          if(!isNaN(cuverieCfg.presMax)) pMax = cuverieCfg.presMax;
+        }
+      } catch(e){ /* si Config indisponible, on garde la valeur du journal */ }
+      if(presValue!=null && !isNaN(presValue)){
+        const sP = statusFor(presValue, pMin, pMax);
+        stats.unshift({value:presValue.toFixed(3),unit:'bar'});
+        worst = worstOf([worst, sP]);
+        if(presDate > last.dt) last.dt = presDate;
+      }
     }
-    renderCard({ title: key==='maisonT' ? 'Maison (maisonT)' : 'Cuverie', updated: fmtDT(last.dt), stats, worstStatus: worst });
+    renderCard({ title: key==='maisonT' ? 'Maison (maisonT)' : 'Cuverie', updated: fmtDT(last.dt), stats, worstStatus: worst, targetId: key==='maisonT' ? 'card-maisonT' : 'card-cuverie' });
 
     const h2 = document.getElementById(key==='maisonT' ? 'h2Maison' : 'h2Cuverie');
     if(h2){
@@ -473,7 +520,7 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
       h2.textContent = `${baseTitle} — Température & Humidité (dernier relevé : ${stats.map(s=>s.value+s.unit).join(' · ')})`;
     }
   } catch(e){
-    renderCard({ title: key==='maisonT' ? 'Maison (maisonT)' : 'Cuverie', error: e.message, worstStatus:'bad' });
+    renderCard({ title: key==='maisonT' ? 'Maison (maisonT)' : 'Cuverie', error: e.message, worstStatus:'bad', targetId: key==='maisonT' ? 'card-maisonT' : 'card-cuverie' });
     document.querySelector('#'+canvasId).closest('section').querySelector('.sub').textContent = 'Données indisponibles pour le moment.';
   }
 }
@@ -496,24 +543,8 @@ async function loadPression(){
     const sample = downsample(parsed, 120);
 
     singleLineChart('chartPression', sample.map(r=>fmtDateOnly(r.dt)), sample.map(r=>r.pres), '#c1533f', [0.75,0.98], 'bar');
-
-    const last = parsed[parsed.length-1];
-    let cardValue = last.pres, cardDate = last.dt, pMin = src.seuils.pMin, pMax = src.seuils.pMax;
-    try{
-      const cfg = await fetchConfig();
-      const cuverieCfg = cfg['cuverie'];
-      if(cuverieCfg && cuverieCfg.dateLive && !isNaN(cuverieCfg.presLive)){
-        cardValue = cuverieCfg.presLive;
-        cardDate = cuverieCfg.dateLive;
-        if(!isNaN(cuverieCfg.presMin)) pMin = cuverieCfg.presMin;
-        if(!isNaN(cuverieCfg.presMax)) pMax = cuverieCfg.presMax;
-      }
-    } catch(e){ /* si Config indisponible, on garde la valeur du journal */ }
-
-    const s = statusFor(cardValue, pMin, pMax);
-    renderCard({ title:'Pression circuit (live)', updated: fmtDT(cardDate), stats:[{value:cardValue.toFixed(3),unit:'bar'}], worstStatus:s });
   } catch(e){
-    renderCard({ title:'Pression circuit (live)', error:e.message, worstStatus:'bad' });
+    document.getElementById('chartPression').closest('section').querySelector('.sub').textContent = 'Données indisponibles : ' + e.message;
   }
 }
 
@@ -553,17 +584,18 @@ async function loadGyro(){
       title:'Gyropalette',
       updated: fmtDT(last.dt),
       stats: gyroStats,
-      worstStatus:'ok'
+      worstStatus:'ok',
+      targetId:'card-gyro'
     });
   } catch(e){
-    renderCard({ title:'Gyropalette', error:e.message, worstStatus:'bad' });
+    renderCard({ title:'Gyropalette', error:e.message, worstStatus:'bad', targetId:'card-gyro' });
   }
 }
 
 async function loadTempOnlyCard(key){
   const src = TEMP_ONLY_SOURCES[key];
   if(!src.url){
-    renderCard({ title:src.label, error:"lien CSV non encore renseigné pour cet onglet.", worstStatus:'unknown' });
+    renderCard({ title:src.label, error:"lien CSV non encore renseigné pour cet onglet.", worstStatus:'unknown', targetId:'card-'+key });
     return;
   }
   try{
@@ -601,6 +633,11 @@ async function loadTempOnlyCard(key){
     }
 
     parsed.sort((a,b)=>a.dt-b.dt);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 15);
+    const recent = parsed.filter(r => r.dt >= cutoff);
+    const chartSet = recent.length > 1 ? recent : parsed.slice(-15);
+
     const last = parsed[parsed.length-1];
 
     let cardTemp = last.temp, cardDate = last.dt, tMin = src.tMin, tMax = src.tMax;
@@ -622,14 +659,15 @@ async function loadTempOnlyCard(key){
     const status = statusFor(cardTemp, tMin, tMax);
     const stats = [{value:cardTemp.toFixed(1),unit:'°C'}];
     if(!isNaN(cardHum)) stats.push({value:cardHum.toFixed(1),unit:'% HR'});
-    renderCard({ title:src.label, updated: fmtDT(cardDate), stats, worstStatus: status });
+    const chartId = 'mini-' + key;
+    renderCard({ title:src.label, updated: fmtDT(cardDate), stats, worstStatus: status, chartId, targetId:'card-'+key });
+    miniChart(chartId, chartSet.map(r=>fmtDateOnly(r.dt)), chartSet.map(r=>r.temp), chartSet.map(r=>r.hum));
   } catch(e){
-    renderCard({ title:src.label, error:e.message, worstStatus:'bad' });
+    renderCard({ title:src.label, error:e.message, worstStatus:'bad', targetId:'card-'+key });
   }
 }
 
 async function loadAll(){
-  document.getElementById('cards').innerHTML = '';
   document.getElementById('lastUpdate').textContent = 'Chargement…';
   await Promise.allSettled([
     loadMaisonOrCuverie('maisonT', 'chartMaison', false),
