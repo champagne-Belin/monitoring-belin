@@ -301,8 +301,12 @@ function worstOf(list){
   if(list.includes('unknown')) return 'unknown';
   return 'ok';
 }
-function badgeLabel(s){
-  return s==='ok' ? 'Dans les seuils' : s==='warn' ? 'Proche du seuil' : s==='bad' ? 'Hors seuil' : 'Donnée indisponible';
+function badgeLabel(s, stats){
+  if(s==='ok') return 'Dans les seuils';
+  if(s!=='warn' && s!=='bad') return 'Donnée indisponible';
+  const label = s==='bad' ? 'Hors seuil' : 'Proche du seuil';
+  const names = (stats||[]).filter(st => st.status===s && st.name).map(st => st.name);
+  return names.length ? `${label} : ${names.join(', ')}` : label;
 }
 
 function renderCard({title, updated, stats, worstStatus, error, chartId, targetId}){
@@ -318,7 +322,7 @@ function renderCard({title, updated, stats, worstStatus, error, chartId, targetI
       <div class="value-row">
         ${stats.map(s => `<div class="stat"><span class="num">${s.value}</span><span class="unit">${s.unit}</span></div>`).join('')}
       </div>
-      <div class="status-badge">${badgeLabel(worstStatus)}</div>
+      <div class="status-badge">${badgeLabel(worstStatus, stats)}</div>
       <div class="updated">Dernière lecture : ${updated}</div>
       ${chartId ? `<div class="mini-chart-holder"><canvas id="${chartId}"></canvas></div>` : ''}
     `;
@@ -492,7 +496,10 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
     const last = parsed[parsed.length-1];
     const sT = statusFor(last.temp, src.seuils.tMin, src.seuils.tMax);
     const sH = statusFor(last.hum, src.seuils.hMin, src.seuils.hMax);
-    const stats = [{value:last.temp.toFixed(1),unit:'°C'},{value:last.hum!=null?last.hum.toFixed(1):'—',unit:'% HR'}];
+    const stats = [
+      {value:last.temp.toFixed(1),unit:'°C',name:'Température',status:sT},
+      {value:last.hum!=null?last.hum.toFixed(1):'—',unit:'% HR',name:'Humidité',status:sH}
+    ];
     let worst = worstOf([sT,sH]);
     if(hasPressure){
       let presValue = last.pres, presDate = last.dt, pMin = src.seuils.pMin, pMax = src.seuils.pMax;
@@ -508,7 +515,7 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
       } catch(e){ /* si Config indisponible, on garde la valeur du journal */ }
       if(presValue!=null && !isNaN(presValue)){
         const sP = statusFor(presValue, pMin, pMax);
-        stats.unshift({value:presValue.toFixed(3),unit:'bar'});
+        stats.unshift({value:presValue.toFixed(3),unit:'bar',name:'Pression',status:sP});
         worst = worstOf([worst, sP]);
         if(presDate > last.dt) last.dt = presDate;
       }
@@ -642,7 +649,7 @@ async function loadTempOnlyCard(key){
     const last = parsed[parsed.length-1];
 
     let cardTemp = last.temp, cardDate = last.dt, tMin = src.tMin, tMax = src.tMax;
-    let cardHum = last.hum;
+    let cardHum = last.hum, hMin = 30, hMax = 90;
     try{
       const cfg = await fetchConfig();
       const modCfg = cfg[key];
@@ -655,11 +662,18 @@ async function loadTempOnlyCard(key){
       if(modCfg && !isNaN(modCfg.humLive)){
         cardHum = modCfg.humLive;
       }
+      if(modCfg && !isNaN(modCfg.humMin)) hMin = modCfg.humMin;
+      if(modCfg && !isNaN(modCfg.humMax)) hMax = modCfg.humMax;
     } catch(e){ /* si Config indisponible, on garde les valeurs de l'historique */ }
 
-    const status = statusFor(cardTemp, tMin, tMax);
-    const stats = [{value:cardTemp.toFixed(1),unit:'°C'}];
-    if(!isNaN(cardHum)) stats.push({value:cardHum.toFixed(1),unit:'% HR'});
+    const sT = statusFor(cardTemp, tMin, tMax);
+    const stats = [{value:cardTemp.toFixed(1),unit:'°C',name:'Température',status:sT}];
+    let status = sT;
+    if(!isNaN(cardHum)){
+      const sH = statusFor(cardHum, hMin, hMax);
+      stats.push({value:cardHum.toFixed(1),unit:'% HR',name:'Humidité',status:sH});
+      status = worstOf([sT, sH]);
+    }
     const chartId = 'mini-' + key;
     renderCard({ title:src.label, updated: fmtDT(cardDate), stats, worstStatus: status, chartId, targetId:'card-'+key });
     miniChart(chartId, chartSet.map(r=>fmtDateOnly(r.dt)), chartSet.map(r=>r.temp), chartSet.map(r=>r.hum));
