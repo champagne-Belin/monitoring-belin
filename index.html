@@ -144,6 +144,12 @@
   </section>
 
   <section class="chart-section">
+    <h2 id="h2Cave">Cave — Température &amp; Humidité</h2>
+    <div class="sub">15 derniers jours · échelle auto sur les valeurs</div>
+    <div class="chart-holder"><canvas id="chartCave"></canvas></div>
+  </section>
+
+  <section class="chart-section">
     <h2 id="h2Cuverie">Cuverie — Température &amp; Humidité</h2>
     <div class="sub">15 derniers jours · échelle auto sur les valeurs</div>
     <div class="chart-holder"><canvas id="chartCuverie"></canvas></div>
@@ -674,9 +680,16 @@ async function loadTempOnlyCard(key){
       stats.push({value:cardHum.toFixed(1),unit:'% HR',name:'Humidité',status:sH});
       status = worstOf([sT, sH]);
     }
-    const chartId = 'mini-' + key;
-    renderCard({ title:src.label, updated: fmtDT(cardDate), stats, worstStatus: status, chartId, targetId:'card-'+key });
-    miniChart(chartId, chartSet.map(r=>fmtDateOnly(r.dt)), chartSet.map(r=>r.temp), chartSet.map(r=>r.hum));
+    if(key === 'cave'){
+      renderCard({ title:src.label, updated: fmtDT(cardDate), stats, worstStatus: status, targetId:'card-'+key });
+      dualAxisChart('chartCave', chartSet.map(r=>fmtDateOnly(r.dt)), chartSet.map(r=>r.temp), chartSet.map(r=>r.hum), null, null);
+      const h2 = document.getElementById('h2Cave');
+      if(h2) h2.textContent = `Cave — Température & Humidité (dernier relevé : ${stats.map(s=>s.value+s.unit).join(' · ')})`;
+    } else {
+      const chartId = 'mini-' + key;
+      renderCard({ title:src.label, updated: fmtDT(cardDate), stats, worstStatus: status, chartId, targetId:'card-'+key });
+      miniChart(chartId, chartSet.map(r=>fmtDateOnly(r.dt)), chartSet.map(r=>r.temp), chartSet.map(r=>r.hum));
+    }
   } catch(e){
     renderCard({ title:src.label, error:e.message, worstStatus:'bad', targetId:'card-'+key });
   }
