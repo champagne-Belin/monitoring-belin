@@ -120,7 +120,7 @@
   <header>
     <div>
       <h1>Monitoring <span>IoT</span> — Champagne Belin</h1>
-      <div class="meta">maisonT · Cuverie · Cave · Habillage · Pression · Gyropalette</div>
+      <div class="meta">maisonT · Cuverie · Cave · Habillage · Maison · Pression · Gyropalette</div>
     </div>
     <div class="meta">
       <div id="lastUpdate">Chargement…</div>
@@ -132,7 +132,7 @@
     <div class="card" id="card-cuverie"><div class="label">Cuverie</div></div>
     <div class="card" id="card-cave"><div class="label">Cave</div></div>
     <div class="card" id="card-habillage"><div class="label">Habillage</div></div>
-    <div class="card unknown" id="card-maison"><div class="label">Maison</div><div class="error-msg">Onglet pas encore connecté.</div></div>
+    <div class="card" id="card-maison"><div class="label">Maison</div></div>
     <div class="card" id="card-maisonT"><div class="label">Maison (maisonT)</div></div>
     <div class="card" id="card-gyro"><div class="label">Gyropalette</div></div>
   </div>
@@ -180,7 +180,8 @@ const SOURCES = {
 // Salles supplémentaires : carte "température live" simple (pas de graphique), en attente du lien CSV publié
 const TEMP_ONLY_SOURCES = {
   cave:      { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=2018936746&single=true&output=csv", label:"Cave", tMin:10, tMax:18 },
-  habillage: { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=506062816&single=true&output=csv", label:"Habillage", tMin:12, tMax:28 }
+  habillage: { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=506062816&single=true&output=csv", label:"Habillage", tMin:12, tMax:28 },
+  maison:    { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=656173007&single=true&output=csv", label:"Maison", tMin:15, tMax:25 }
 };
 
 // Onglet Config : une ligne par module, avec seuils et valeurs Live (DateLive / PressionLive / TemperatureLive)
@@ -675,7 +676,8 @@ async function loadAll(){
     loadPression(),
     loadGyro(),
     loadTempOnlyCard('cave'),
-    loadTempOnlyCard('habillage')
+    loadTempOnlyCard('habillage'),
+    loadTempOnlyCard('maison')
   ]);
   const now = new Date();
   document.getElementById('lastUpdate').textContent = 'Actualisé à ' + now.toLocaleTimeString('fr-FR');
