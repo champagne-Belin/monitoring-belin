@@ -191,7 +191,7 @@ const SOURCES = {
                 seuils:{tMin:12,tMax:15,hMin:30,hMax:95,pMin:0.8,pMax:1} },
   pression: { sheet:"cuverie-PressionLive-Historique",
                 seuils:{pMin:0.8,pMax:1} },
-  gyro:     { sheet:"Gyro_Cycle_refere" }
+  gyro:     { sheet:"Gyro_Cycle_reference" }
 };
 
 // Salles supplémentaires : carte "température live" simple (pas de graphique), en attente du lien CSV publié
@@ -482,29 +482,12 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
     const dateIdx = 0;
     let tempIdx = header.findIndex(h => h.includes('temp'));
     let humIdx = header.findIndex(h => h.includes('humid'));
-    let sondeIdx = header.findIndex(h => h.includes('sonde'));
     let presIdx = hasPressure ? header.findIndex(h => h.includes('pression')) : -1;
     if(tempIdx<0) tempIdx = 2;
     if(humIdx<0) humIdx = 3;
 
-    // Mots-clés attendus dans la colonne Sonde pour ne garder que les lignes de cette source
-    const sondeKeywords = { maisonT: ['maisont'], cuverie: ['cuverie'] };
-    const wanted = sondeKeywords[key] || [];
-
-    let dataRows = rows.slice(1);
-    let sondeFilterFailed = false;
-    if(sondeIdx >= 0 && wanted.length){
-      const filtered = dataRows.filter(r => {
-        const s = (r[sondeIdx] || '').toLowerCase().trim();
-        return wanted.some(w => s === w || s.includes(w));
-      });
-      if(filtered.length > 0){
-        dataRows = filtered;
-      } else {
-        sondeFilterFailed = true;
-        dataRows = [];
-      }
-    }
+    // Chaque onglet est dédié à une seule salle : pas de filtre par "Sonde", toute ligne appartient à cet onglet
+    const dataRows = rows.slice(1);
 
     const parsed = dataRows.map(r => ({
       dt: parseFRDateTime(r[dateIdx]),
@@ -513,10 +496,11 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
       pres: presIdx>=0 ? toNum(r[presIdx]) : null
     })).filter(r => r.dt && !isNaN(r.temp));
 
-    if(parsed.length === 0 || sondeFilterFailed){
+    if(parsed.length === 0){
       let hint = `En-tête détecté : [${rows[0].join(' | ')}].`;
-      if(sondeIdx >= 0){
-        const distinctSondes = [...new Set(rows.slice(1).map(r => (r[sondeIdx]||'').trim()).filter(Boolean))];
+      const sondeIdxHint = header.findIndex(h => h.includes('sonde'));
+      if(sondeIdxHint >= 0){
+        const distinctSondes = [...new Set(rows.slice(1).map(r => (r[sondeIdxHint]||'').trim()).filter(Boolean))];
         hint += ` Valeurs de "Sonde" trouvées : [${distinctSondes.join(', ')}].`;
       }
       throw new Error(`Aucune ligne exploitable. ${hint}`);
@@ -597,15 +581,15 @@ async function loadGyro(){
   try{
     const rows = await fetchSheet(SOURCES.gyro.sheet);
     const header = rows[0].map(h => h.toLowerCase());
-    const dtIdx = header.findIndex(h => h.includes('horodatage'));
+    const dtIdx = header.findIndex(h => h.includes('horodatage') || h.includes('timestamp'));
     const angleIdx = header.findIndex(h => h.includes('angle'));
     const phaseIdx = header.findIndex(h => h.includes('phase'));
     const elapsedIdx = header.findIndex(h => h.includes('temps_ecoule') || h.includes('temps ecoule'));
 
     const parsed = rows.slice(1).map(r => ({
       dt: parseFRDateTime(r[dtIdx>=0?dtIdx:1]),
-      angle: toNum(r[angleIdx>=0?angleIdx:4]),
-      phase: (r[phaseIdx>=0?phaseIdx:3]||'').trim(),
+      angle: toNum(r[angleIdx>=0?angleIdx:3]),
+      phase: phaseIdx>=0 ? (r[phaseIdx]||'').trim() : '',
       elapsed: toNum(r[elapsedIdx>=0?elapsedIdx:2])
     })).filter(r => r.dt && !isNaN(r.angle));
 
@@ -648,19 +632,9 @@ async function loadTempOnlyCard(key){
     const header = rows[0].map(h => h.toLowerCase());
     const tempIdx = header.findIndex(h => h.includes('temp'));
     const humIdx = header.findIndex(h => h.includes('humid'));
-    const sondeIdx = header.findIndex(h => h.includes('sonde'));
 
-    let dataRows = rows.slice(1);
-    let sondeFilterFailed = false;
-    if(sondeIdx >= 0){
-      const filtered = dataRows.filter(r => (r[sondeIdx]||'').toLowerCase().trim().includes(key));
-      if(filtered.length > 0){
-        dataRows = filtered;
-      } else {
-        sondeFilterFailed = true;
-        dataRows = [];
-      }
-    }
+    // Chaque onglet est dédié à une seule salle : pas de filtre par "Sonde", toute ligne appartient à cet onglet
+    const dataRows = rows.slice(1);
 
     const parsed = dataRows.map(r => ({
       dt: parseFRDateTime(r[0]),
@@ -668,10 +642,11 @@ async function loadTempOnlyCard(key){
       hum: toNum(r[humIdx>=0?humIdx:3])
     })).filter(r => r.dt && !isNaN(r.temp));
 
-    if(parsed.length === 0 || sondeFilterFailed){
+    if(parsed.length === 0){
       let hint = `En-tête détecté : [${rows[0].join(' | ')}].`;
-      if(sondeIdx >= 0){
-        const distinctSondes = [...new Set(rows.slice(1).map(r => (r[sondeIdx]||'').trim()).filter(Boolean))];
+      const sondeIdxHint = header.findIndex(h => h.includes('sonde'));
+      if(sondeIdxHint >= 0){
+        const distinctSondes = [...new Set(rows.slice(1).map(r => (r[sondeIdxHint]||'').trim()).filter(Boolean))];
         hint += ` Valeurs de "Sonde" trouvées : [${distinctSondes.join(', ')}].`;
       }
       throw new Error(`Aucune ligne exploitable. ${hint}`);
@@ -754,7 +729,7 @@ async function tryLogin(code){
     const ok = await verifyCode(code);
     if(ok){
       accessCode = code;
-      setCookie('belin_code', code, 7);
+      setCookie('belin_code', code, 30);
       unlockDashboard();
     } else {
       errEl.textContent = 'Code invalide.';
