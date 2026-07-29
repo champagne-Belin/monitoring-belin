@@ -115,7 +115,18 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+
+<div id="loginGate" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:8px;padding:32px 28px;max-width:340px;width:100%;text-align:center;">
+    <h1 style="font-size:20px;font-weight:400;margin:0 0 6px;">Monitoring <span style="color:var(--gold);">IoT</span></h1>
+    <div style="font-family:-apple-system,sans-serif;font-size:12px;color:var(--text-dim);margin-bottom:20px;">Champagne Belin — accès protégé</div>
+    <input id="codeInput" type="password" placeholder="Code d'accès" style="width:100%;padding:10px 12px;font-size:16px;border:1px solid var(--panel-border);border-radius:5px;margin-bottom:12px;box-sizing:border-box;font-family:-apple-system,sans-serif;">
+    <button id="loginBtn" style="width:100%;padding:10px;font-size:14px;background:var(--gold);color:#fff;border:none;border-radius:5px;cursor:pointer;font-family:-apple-system,sans-serif;">Accéder</button>
+    <div id="loginError" style="color:var(--bad);font-size:12px;margin-top:12px;font-family:-apple-system,sans-serif;display:none;"></div>
+  </div>
+</div>
+
+<div class="wrap" id="dashboard" style="display:none;">
 
   <header>
     <div>
@@ -174,28 +185,27 @@
 
 <script>
 const SOURCES = {
-  maisonT:  { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=1821799987&single=true&output=csv",
+  maisonT:  { sheet:"maisonT",
                 seuils:{tMin:12,tMax:30,hMin:30,hMax:90} },
-  cuverie:  { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=724112298&single=true&output=csv",
+  cuverie:  { sheet:"cuverie",
                 seuils:{tMin:12,tMax:15,hMin:30,hMax:95,pMin:0.8,pMax:1} },
-  pression: { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=1179416058&single=true&output=csv",
+  pression: { sheet:"cuverie-PressionLive-Historique",
                 seuils:{pMin:0.8,pMax:1} },
-  gyro:     { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=1848638682&single=true&output=csv" }
+  gyro:     { sheet:"Gyro_Cycle_refere" }
 };
 
 // Salles supplémentaires : carte "température live" simple (pas de graphique), en attente du lien CSV publié
 const TEMP_ONLY_SOURCES = {
-  cave:      { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=2018936746&single=true&output=csv", label:"Cave", tMin:10, tMax:18 },
-  habillage: { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=506062816&single=true&output=csv", label:"Habillage", tMin:12, tMax:28 },
-  maison:    { url:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=656173007&single=true&output=csv", label:"Maison", tMin:15, tMax:25 }
+  cave:      { sheet:"cave", label:"Cave", tMin:10, tMax:18 },
+  habillage: { sheet:"habillage", label:"Habillage", tMin:12, tMax:28 },
+  maison:    { sheet:"maison", label:"Maison", tMin:15, tMax:25 }
 };
 
 // Onglet Config : une ligne par module, avec seuils et valeurs Live (DateLive / PressionLive / TemperatureLive)
-const CONFIG_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQi9YcUiJ_0ceEIFZZFABOSB5_3DZYQ8AWCTwK8MZiqfYO0-yE1NodOtYHZzbe9B97w4I_Y6aTy_cR2/pub?gid=175564844&single=true&output=csv";
 let configCache = null;
 async function fetchConfig(){
   if(configCache) return configCache;
-  const rows = await fetchCSV(CONFIG_URL);
+  const rows = await fetchSheet("Config");
   const header = rows[0].map(h => h.trim());
   const idx = name => header.findIndex(h => h.toLowerCase() === name.toLowerCase());
   const moduleIdx = idx('Module');
@@ -278,11 +288,32 @@ function fmtDateOnly(dt){
   return `${pad(dt.getDate())}/${pad(dt.getMonth()+1)}`;
 }
 
-async function fetchCSV(url){
-  const res = await fetch(url, {cache:'no-store'});
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwdvqqSnQKw-U0lUAlX4ONrC0PINEesgJ8a_x8-FELSEoDFfz7Rak2-d4T3tXI-1zNLSQ/exec";
+let accessCode = null;
+
+function setCookie(name, value, days){
+  const d = new Date();
+  d.setTime(d.getTime() + days*24*60*60*1000);
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/;SameSite=Lax`;
+}
+function getCookie(name){
+  const match = document.cookie.match(new RegExp('(^| )'+name+'=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+async function verifyCode(code){
+  const res = await fetch(`${WEBAPP_URL}?code=${encodeURIComponent(code)}`, {cache:'no-store'});
   if(!res.ok) throw new Error('HTTP ' + res.status);
-  const text = await res.text();
-  return parseCSV(text);
+  const json = await res.json();
+  return !!json.ok;
+}
+
+async function fetchSheet(sheetName){
+  const res = await fetch(`${WEBAPP_URL}?code=${encodeURIComponent(accessCode)}&sheet=${encodeURIComponent(sheetName)}`, {cache:'no-store'});
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+  if(!json.ok) throw new Error(json.error || 'Accès refusé');
+  return json.data;
 }
 
 function downsample(arr, target){
@@ -446,7 +477,7 @@ function miniChart(canvasId, labels, tempData, humData){
 async function loadMaisonOrCuverie(key, canvasId, hasPressure){
   const src = SOURCES[key];
   try{
-    const rows = await fetchCSV(src.url);
+    const rows = await fetchSheet(src.sheet);
     const header = rows[0].map(h => h.toLowerCase());
     const dateIdx = 0;
     let tempIdx = header.findIndex(h => h.includes('temp'));
@@ -542,7 +573,7 @@ async function loadMaisonOrCuverie(key, canvasId, hasPressure){
 async function loadPression(){
   const src = SOURCES.pression;
   try{
-    const rows = await fetchCSV(src.url);
+    const rows = await fetchSheet(src.sheet);
     const header = rows[0].map(h => h.toLowerCase());
     let presIdx = header.findIndex(h => h.includes('pression'));
     if(presIdx<0) presIdx = 1;
@@ -564,7 +595,7 @@ async function loadPression(){
 
 async function loadGyro(){
   try{
-    const rows = await fetchCSV(SOURCES.gyro.url);
+    const rows = await fetchSheet(SOURCES.gyro.sheet);
     const header = rows[0].map(h => h.toLowerCase());
     const dtIdx = header.findIndex(h => h.includes('horodatage'));
     const angleIdx = header.findIndex(h => h.includes('angle'));
@@ -608,12 +639,12 @@ async function loadGyro(){
 
 async function loadTempOnlyCard(key){
   const src = TEMP_ONLY_SOURCES[key];
-  if(!src.url){
+  if(!src.sheet){
     renderCard({ title:src.label, error:"lien CSV non encore renseigné pour cet onglet.", worstStatus:'unknown', targetId:'card-'+key });
     return;
   }
   try{
-    const rows = await fetchCSV(src.url);
+    const rows = await fetchSheet(src.sheet);
     const header = rows[0].map(h => h.toLowerCase());
     const tempIdx = header.findIndex(h => h.includes('temp'));
     const humIdx = header.findIndex(h => h.includes('humid'));
@@ -710,7 +741,50 @@ async function loadAll(){
   document.getElementById('lastUpdate').textContent = 'Actualisé à ' + now.toLocaleTimeString('fr-FR');
 }
 
-loadAll();
+async function unlockDashboard(){
+  document.getElementById('loginGate').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  loadAll();
+}
+
+async function tryLogin(code){
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  try{
+    const ok = await verifyCode(code);
+    if(ok){
+      accessCode = code;
+      setCookie('belin_code', code, 7);
+      unlockDashboard();
+    } else {
+      errEl.textContent = 'Code invalide.';
+      errEl.style.display = 'block';
+    }
+  } catch(e){
+    errEl.textContent = 'Erreur de connexion : ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+document.getElementById('loginBtn').addEventListener('click', () => {
+  const code = document.getElementById('codeInput').value.trim();
+  if(code) tryLogin(code);
+});
+document.getElementById('codeInput').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter') document.getElementById('loginBtn').click();
+});
+
+// Au chargement : si un code est déjà mémorisé (cookie 7 jours), on tente une connexion silencieuse
+(async () => {
+  const saved = getCookie('belin_code');
+  if(saved){
+    try{
+      const ok = await verifyCode(saved);
+      if(ok){ accessCode = saved; unlockDashboard(); return; }
+    } catch(e){ /* on retombe sur l'écran de connexion */ }
+  }
+  document.getElementById('codeInput').focus();
+})();
 </script>
 </body>
 </html>
