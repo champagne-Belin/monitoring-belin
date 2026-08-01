@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cycle Gyropalette — O.BELIN</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1c1a17;
+    --paper: #ffffff;
+    --line: #e2ddd2;
+    --gold: #c9a24b;
+    --gold-deep: #a8813f;
+    --straw: #f4efe2;
+    --mist: #8a8276;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 56px;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 26px 26px 22px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 24px 48px -28px rgba(28,26,23,0.18);
+  }
+
+  .mark {
+    text-align: center;
+    padding-bottom: 18px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .mark .maison-top {
+    font-family: 'Fraunces', serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .mark .maison-bottom {
+    font-family: 'Fraunces', serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gold-deep);
+    margin-top: 4px;
+  }
+  .mark .subtitle {
+    font-size: 0.64rem;
+    color: var(--mist);
+    margin-top: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .layout { display: flex; gap: 22px; align-items: center; }
+
+  .gauge-wrap { display: flex; flex-direction: column; align-items: center; width: 64px; }
+  .gauge-top-label, .gauge-bottom-label { font-size: 0.6rem; color: var(--mist); }
+  .gauge-top-label { margin-bottom: 6px; }
+  .gauge-bottom-label { margin-top: 6px; }
+
+  .tube {
+    position: relative;
+    width: 34px;
+    height: 190px;
+    border: 1.5px solid var(--line);
+    border-radius: 17px;
+    overflow: hidden;
+    background: var(--straw);
+  }
+  .tick { position: absolute; left: -1px; width: 6px; height: 1px; background: var(--line); }
+  .fill {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 0%;
+    background: linear-gradient(180deg, #d8b869, var(--gold-deep));
+    border-radius: 0 0 16px 16px;
+    transition: height 0.8s ease;
+  }
+  .bubble {
+    position: absolute;
+    bottom: -6px;
+    background-image: url('data:image/png;base64,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');
+    background-size: contain;
+    background-repeat: no-repeat;
+    opacity: 0.5;
+    animation: rise 3.4s linear infinite;
+  }
+  @keyframes rise { to { transform: translateY(-85px); opacity: 0; } }
+  .marker {
+    position: absolute; left: -6px; right: -6px;
+    height: 2px; background: var(--ink); bottom: 0%;
+    transition: bottom 0.8s ease;
+  }
+  .marker::after {
+    content: ""; position: absolute; right: -9px; top: -4px;
+    width: 8px; height: 8px; border-radius: 50%; background: var(--ink);
+  }
+
+  .hero { flex: 1; }
+  .hero-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--mist); }
+  .hero-value {
+    font-family: 'Fraunces', serif;
+    font-size: 2.6rem;
+    font-weight: 600;
+    color: var(--gold-deep);
+    line-height: 1.05;
+    margin-top: 4px;
+  }
+  .hero-unit { font-size: 0.7rem; color: var(--mist); margin-top: 2px; }
+
+  .secondary {
+    display: flex; gap: 18px;
+    margin-top: 20px; padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .stat-label { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--mist); }
+  .stat-value { font-family: 'Fraunces', serif; font-size: 1.05rem; font-weight: 600; margin-top: 2px; }
+
+  .status-line { text-align: center; font-size: 0.66rem; color: var(--mist); margin-top: 22px; }
+  .dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: #6fae7a; margin-right: 6px; box-shadow: 0 0 5px #6fae7a;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .dot.demo { background: var(--gold-deep); box-shadow: 0 0 5px var(--gold-deep); }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+
+  .badge { display: block; text-align: center; margin-top: 10px; font-size: 0.58rem; color: var(--mist); }
+</style>
+</head>
+<body>
+
+<div class="card">
+
+  <div class="mark">
+    <div class="maison-top">Champagne</div>
+    <div class="maison-bottom">O.BELIN</div>
+    <div class="subtitle">Cycle Gyropalette</div>
+  </div>
+
+  <div class="layout">
+    <div class="gauge-wrap">
+      <div class="gauge-top-label">Fin</div>
+      <div class="tube" id="tube">
+        <div class="tick" style="bottom:0%"></div>
+        <div class="tick" style="bottom:25%"></div>
+        <div class="tick" style="bottom:50%"></div>
+        <div class="tick" style="bottom:75%"></div>
+        <div class="tick" style="bottom:100%"></div>
+        <div class="marker" id="marker"></div>
+        <div class="fill" id="fill"></div>
+      </div>
+      <div class="gauge-bottom-label">Début</div>
+    </div>
+
+    <div class="hero">
+      <div class="hero-label">Temps restant</div>
+      <div class="hero-value" id="val-remaining">—</div>
+      <div class="hero-unit">avant fin de cycle</div>
+      <div class="hero-unit" id="val-pct" style="color: var(--gold-deep); font-weight:600; margin-top:6px;">—</div>
+    </div>
+  </div>
+
+  <div class="secondary">
+    <div>
+      <div class="stat-label">Début remuage</div>
+      <div class="stat-value" id="val-start">—</div>
+    </div>
+    <div>
+      <div class="stat-label">Fin prévue</div>
+      <div class="stat-value" id="val-end">—</div>
+    </div>
+    <div>
+      <div class="stat-label">Écoulé</div>
+      <div class="stat-value" id="val-elapsed">—</div>
+    </div>
+  </div>
+
+  <div class="status-line"><span class="dot" id="status-dot"></span><span id="status-text">Chargement…</span></div>
+  <span class="badge" id="badge" style="display:none;">Mode démonstration — onglet Sheet pas encore branché</span>
+</div>
+
+<script>
+/* ============================================================
+   CONFIGURATION — à compléter quand l'onglet "cycle" sera prêt
+   ============================================================ */
+
+const SHEET_ID = "";              // ID du Google Sheet
+const SHEET_GID = "0";            // gid de l'onglet cycle
+const COL_TIMESTAMP = "Horodatage";
+const COL_ANGLE = "AngleX";
+const DUREE_CYCLE_HEURES = 96;    // durée fixe, à ajuster depuis les relevés
+
+/* ============================================================ */
+
+const joursMois = ["jan.","fév.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+
+function fmtDateHeure(d) {
+  const j = d.getDate();
+  const m = joursMois[d.getMonth()];
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${j} ${m}, ${h}h${min}`;
+}
+function fmtDuration(hours) {
+  if (hours < 0) hours = 0;
+  const d = Math.floor(hours / 24);
+  const h = Math.round(hours % 24);
+  return d > 0 ? `${d}j ${h}h` : `${h}h`;
+}
+
+function render(startTime, angleActuel, isDemo) {
+  const now = new Date();
+  const endTime = new Date(startTime.getTime() + DUREE_CYCLE_HEURES * 3600000);
+  const elapsedH = (now - startTime) / 3600000;
+  const remainingH = Math.max(DUREE_CYCLE_HEURES - elapsedH, 0);
+  const anglePct = Math.min(Math.max(angleActuel / 90, 0), 1);
+  const fillPct = Math.round((1 - anglePct) * 100);
+
+  document.getElementById("fill").style.height = fillPct + "%";
+  document.getElementById("marker").style.bottom = fillPct + "%";
+  document.getElementById("val-remaining").textContent = fmtDuration(remainingH);
+  document.getElementById("val-pct").textContent = fillPct + "% du cycle effectué";
+  document.getElementById("val-start").textContent = fmtDateHeure(startTime);
+  document.getElementById("val-end").textContent = fmtDateHeure(endTime);
+  document.getElementById("val-elapsed").textContent = fmtDuration(Math.max(elapsedH, 0));
+
+  const dot = document.getElementById("status-dot");
+  const badge = document.getElementById("badge");
+  if (isDemo) {
+    dot.classList.add("demo");
+    document.getElementById("status-text").textContent = "Données d'exemple";
+    badge.style.display = "block";
+  } else {
+    dot.classList.remove("demo");
+    document.getElementById("status-text").textContent = "Dernière lecture — à l'instant";
+    badge.style.display = "none";
+  }
+}
+
+async function refresh() {
+  if (!SHEET_ID) {
+    const demoStart = new Date(Date.now() - 40 * 3600000);
+    render(demoStart, 52, true);
+    return;
+  }
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${SHEET_GID}`;
+    const res = await fetch(url);
+    const text = await res.text();
+    const rows = text.trim().split("\n").map(r => r.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
+    const headers = rows[0];
+    const data = rows.slice(1).map(r => { const o = {}; headers.forEach((h,i)=>o[h]=r[i]); return o; });
+    const first = data[0], last = data[data.length - 1];
+    render(new Date(first[COL_TIMESTAMP]), parseFloat(last[COL_ANGLE]), false);
+  } catch (e) {
+    document.getElementById("status-text").textContent = "Erreur : " + e.message;
+  }
+}
+
+const tube = document.getElementById("tube");
+for (let i = 0; i < 6; i++) {
+  const b = document.createElement("div");
+  const size = 3 + Math.random() * 3;
+  b.className = "bubble";
+  b.style.width = size + "px";
+  b.style.height = size + "px";
+  b.style.left = (8 + Math.random() * 18) + "px";
+  b.style.animationDelay = (Math.random() * 3.4) + "s";
+  tube.appendChild(b);
+}
+
+refresh();
+setInterval(refresh, 60000);
+</script>
+
+</body>
+</html>
