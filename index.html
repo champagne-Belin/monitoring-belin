@@ -59,6 +59,34 @@
     transition:background 0.15s ease;
   }
   #refreshBtn:active{ background:rgba(0,0,0,0.08); }
+
+  /* Barre de liens rapides vers les sous-pages (extensible) */
+  .quicklinks{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-bottom:20px;
+  }
+  .quicklinks a{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:13px;
+    font-weight:600;
+    color:var(--accent);
+    background:rgba(0,113,227,0.08);
+    border:1px solid rgba(0,113,227,0.15);
+    padding:8px 16px;
+    border-radius:980px;
+    text-decoration:none;
+    transition:background 0.15s ease, transform 0.15s ease;
+    letter-spacing:-0.01em;
+  }
+  .quicklinks a:active{
+    background:rgba(0,113,227,0.16);
+    transform:scale(0.97);
+  }
+
   @media (min-width:640px){
     body{padding:44px 32px 72px;}
     header{flex-direction:row;justify-content:space-between;align-items:flex-end;}
@@ -170,6 +198,10 @@
 </div>
 
 <div class="wrap" id="dashboard" style="display:none;">
+
+  <div class="quicklinks">
+    <a href="gyropalette-cycle.html">🍾 Cycle Gyropalette</a>
+  </div>
 
   <header>
     <div>
