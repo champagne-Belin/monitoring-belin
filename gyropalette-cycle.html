@@ -143,9 +143,34 @@
   @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
 
   .badge { display: block; text-align: center; margin-top: 10px; font-size: 0.58rem; color: var(--mist); }
+
+  /* Bouton retour — même style que les boutons quicklinks de l'index */
+  .back-link{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:13px;
+    font-weight:600;
+    color:#0071e3;
+    background:rgba(0,113,227,0.08);
+    border:1px solid rgba(0,113,227,0.15);
+    padding:8px 16px;
+    border-radius:980px;
+    text-decoration:none;
+    margin-bottom:18px;
+    transition:background 0.15s ease, transform 0.15s ease;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    letter-spacing:-0.01em;
+  }
+  .back-link:active{
+    background:rgba(0,113,227,0.16);
+    transform:scale(0.97);
+  }
 </style>
 </head>
 <body>
+
+<a href="index.html" class="back-link">← Retour au monitoring</a>
 
 <div class="card">
 
