@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Historique Clim Cuverie — O.BELIN</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1c1a17;
+    --paper: #ffffff;
+    --line: #e2ddd2;
+    --gold: #c9a24b;
+    --gold-deep: #a8813f;
+    --straw: #f4efe2;
+    --mist: #8a8276;
+    --ok: #4d8b5b;
+    --bad: #b5493a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 56px;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 26px 26px 22px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 24px 48px -28px rgba(28,26,23,0.18);
+  }
+
+  .mark {
+    text-align: center;
+    padding-bottom: 18px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .mark .maison-top {
+    font-family: 'Fraunces', serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .mark .maison-bottom {
+    font-family: 'Fraunces', serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gold-deep);
+    margin-top: 4px;
+  }
+  .mark .subtitle {
+    font-size: 0.64rem;
+    color: var(--mist);
+    margin-top: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .statut-actuel {
+    text-align: center;
+    padding: 14px 0 18px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .statut-actuel .hero-label {
+    font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--mist);
+  }
+  .statut-actuel .hero-value {
+    font-family: 'Fraunces', serif;
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+  .statut-actuel .hero-value.ok { color: var(--ok); }
+  .statut-actuel .hero-value.bad { color: var(--bad); }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td {
+    text-align: left;
+    padding: 8px 4px;
+    font-size: 0.72rem;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.6rem;
+    color: var(--mist);
+    font-weight: 600;
+  }
+  .evenement-ok { color: var(--ok); font-weight: 600; }
+  .evenement-bad { color: var(--bad); font-weight: 600; }
+
+  #chargement, #vide {
+    text-align: center;
+    color: var(--mist);
+    font-size: 0.75rem;
+    padding: 24px 0;
+  }
+
+  .back-link{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:13px;
+    font-weight:600;
+    color:#0071e3;
+    background:rgba(0,113,227,0.08);
+    border:1px solid rgba(0,113,227,0.15);
+    padding:8px 16px;
+    border-radius:980px;
+    text-decoration:none;
+    margin-bottom:18px;
+    transition:background 0.15s ease, transform 0.15s ease;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    letter-spacing:-0.01em;
+  }
+  .back-link:active{
+    background:rgba(0,113,227,0.16);
+    transform:scale(0.97);
+  }
+
+  .status-line { text-align: center; font-size: 0.66rem; color: var(--mist); margin-top: 18px; }
+</style>
+</head>
+<body>
+
+<a href="index.html" class="back-link">← Retour au monitoring</a>
+
+<div class="card">
+
+  <div class="mark">
+    <div class="maison-top">Champagne</div>
+    <div class="maison-bottom">O.BELIN</div>
+    <div class="subtitle">Historique Clim Cuverie</div>
+  </div>
+
+  <div class="statut-actuel">
+    <div class="hero-label">Statut actuel</div>
+    <div class="hero-value" id="statut-actuel">Chargement…</div>
+  </div>
+
+  <div id="chargement">Chargement de l'historique…</div>
+  <div id="vide" style="display:none;">Aucun changement d'état enregistré.</div>
+
+  <table id="tableau-historique" style="display:none;">
+    <thead>
+      <tr><th>Date / Heure</th><th>Événement</th></tr>
+    </thead>
+    <tbody id="corps-tableau"></tbody>
+  </table>
+
+  <div class="status-line" id="status-text">—</div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIGURATION — meme URL que la carte du dashboard principal
+   ============================================================ */
+const CLIM_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyBxYsnDxVuOPeftqpM_Z1EqOsQs80phnHN5L5nvUxuCJZg_5Zp-mdRWOgBzZI4cC5CAg/exec";
+
+function getCookie(name){
+  const match = document.cookie.match(new RegExp('(^| )'+name+'=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+const ACCESS_CODE = getCookie("belin_code") || "";
+
+async function chargerStatut(){
+  try{
+    const url = `${CLIM_WEBAPP_URL}?type=statutClim&code=${encodeURIComponent(ACCESS_CODE)}`;
+    const res = await fetch(url, { cache:"no-store" });
+    const json = await res.json();
+    if(!json.ok) throw new Error(json.error || "acces refuse");
+
+    const el = document.getElementById("statut-actuel");
+    if(json.etat === "OK"){
+      el.textContent = "En fonctionnement";
+      el.className = "hero-value ok";
+    } else {
+      el.textContent = "À l'arrêt";
+      el.className = "hero-value bad";
+    }
+  } catch(e){
+    document.getElementById("statut-actuel").textContent = "Erreur";
+  }
+}
+
+async function chargerHistorique(){
+  try{
+    const url = `${CLIM_WEBAPP_URL}?type=historiqueClim&code=${encodeURIComponent(ACCESS_CODE)}`;
+    const res = await fetch(url, { cache:"no-store" });
+    const json = await res.json();
+    if(!json.ok) throw new Error(json.error || "acces refuse");
+
+    document.getElementById("chargement").style.display = "none";
+
+    if(!json.historique || json.historique.length === 0){
+      document.getElementById("vide").style.display = "block";
+      document.getElementById("status-text").textContent = "—";
+      return;
+    }
+
+    const corps = document.getElementById("corps-tableau");
+    json.historique.forEach(ligne => {
+      const tr = document.createElement("tr");
+
+      const tdDate = document.createElement("td");
+      tdDate.textContent = ligne.timestamp;
+
+      const tdEvenement = document.createElement("td");
+      if(ligne.etat === "OK"){
+        tdEvenement.textContent = "Reprise";
+        tdEvenement.className = "evenement-ok";
+      } else {
+        tdEvenement.textContent = "Arrêt détecté";
+        tdEvenement.className = "evenement-bad";
+      }
+
+      tr.appendChild(tdDate);
+      tr.appendChild(tdEvenement);
+      corps.appendChild(tr);
+    });
+
+    document.getElementById("tableau-historique").style.display = "table";
+    document.getElementById("status-text").textContent = json.historique.length + " événement(s) affiché(s)";
+  } catch(e){
+    document.getElementById("chargement").textContent = "Erreur : " + e.message;
+  }
+}
+
+chargerStatut();
+chargerHistorique();
+</script>
+
+</body>
+</html>
