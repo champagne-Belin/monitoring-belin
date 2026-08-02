@@ -166,6 +166,49 @@
     background:rgba(0,113,227,0.16);
     transform:scale(0.97);
   }
+
+  /* Repères des mouvements réels détectés (accéléromètre) sur la jauge */
+  .move-tick {
+    position: absolute;
+    left: -3px;
+    width: 40px;
+    height: 2px;
+    background: var(--ink);
+    opacity: 0.28;
+  }
+
+  /* Bloc "prochain mouvement" */
+  .next-move {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .next-move .lbl { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--mist); }
+  .next-move .val { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1rem; margin-top: 2px; }
+
+  /* Bandeau d'alerte, actif dans la marge de préavis avant un mouvement */
+  .alert-banner {
+    display: none;
+    margin-top: 14px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    background: #fdeee6;
+    border: 1px solid #e8a878;
+    color: #a8562f;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-align: center;
+    letter-spacing: 0.02em;
+    animation: alertPulse 1.1s ease-in-out infinite;
+  }
+  .alert-banner.active { display: block; }
+  @keyframes alertPulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
 </style>
 </head>
 <body>
@@ -191,6 +234,7 @@
         <div class="tick" style="bottom:100%"></div>
         <div class="marker" id="marker"></div>
         <div class="fill" id="fill"></div>
+        <div id="move-ticks"></div>
       </div>
       <div class="gauge-bottom-label">Début</div>
     </div>
@@ -218,24 +262,39 @@
     </div>
   </div>
 
+  <div class="next-move" id="next-move" style="display:none;">
+    <div>
+      <div class="lbl">Prochain mouvement estimé</div>
+      <div class="val" id="val-next-move">—</div>
+    </div>
+  </div>
+
+  <div class="alert-banner" id="alert-banner">🔔 Mouvement de cage imminent</div>
+
   <div class="status-line"><span class="dot" id="status-dot"></span><span id="status-text">Chargement…</span></div>
   <span class="badge" id="badge" style="display:none;">Mode démonstration — onglet Sheet pas encore branché</span>
 </div>
 
 <script>
 /* ============================================================
-   CONFIGURATION — à compléter quand l'onglet "cycle" sera prêt
+   CONFIGURATION
    ============================================================ */
 
-const SHEET_ID = "";              // ID du Google Sheet
-const SHEET_GID = "0";            // gid de l'onglet cycle
-const COL_TIMESTAMP = "Horodatage";
-const COL_ANGLE = "AngleX";
-const DUREE_CYCLE_HEURES = 96;    // durée fixe, à ajuster depuis les relevés
+// URL du déploiement Web App du script Apps Script "Gyropalette connectée"
+// (celle que le firmware ESP32 appelle déjà pour gyro_log / gyro_update_state)
+const GYRO_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyOXmQnGRqAmgJY5KZiub6csKPpGR7yNMNoW5j7nHWh7BbP5wdZG_k6PShB-nQTlFUwTA/exec";
+
+// Même code d'accès que le reste du site (cookie belin_code)
+const ACCESS_CODE = getCookie("belin_code") || "";
 
 /* ============================================================ */
 
 const joursMois = ["jan.","fév.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+
+function getCookie(name){
+  const match = document.cookie.match(new RegExp('(^| )'+name+'=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
 
 function fmtDateHeure(d) {
   const j = d.getDate();
@@ -251,13 +310,15 @@ function fmtDuration(hours) {
   return d > 0 ? `${d}j ${h}h` : `${h}h`;
 }
 
-function render(startTime, angleActuel, isDemo) {
+// Progression calculée sur le TEMPS écoulé (t0 + duree_cycle_h), pas sur l'angle :
+// le remuage avance par mouvements discrets ("coups de cage"), l'angle ne varie
+// donc pas proportionnellement au temps.
+function render(startTime, dureeCycleH, isDemo, dernierAngle, mouvements, prochainMouvement, alerteA) {
   const now = new Date();
-  const endTime = new Date(startTime.getTime() + DUREE_CYCLE_HEURES * 3600000);
+  const endTime = new Date(startTime.getTime() + dureeCycleH * 3600000);
   const elapsedH = (now - startTime) / 3600000;
-  const remainingH = Math.max(DUREE_CYCLE_HEURES - elapsedH, 0);
-  const anglePct = Math.min(Math.max(angleActuel / 90, 0), 1);
-  const fillPct = Math.round((1 - anglePct) * 100);
+  const remainingH = Math.max(dureeCycleH - elapsedH, 0);
+  const fillPct = Math.min(Math.max(Math.round((elapsedH / dureeCycleH) * 100), 0), 100);
 
   document.getElementById("fill").style.height = fillPct + "%";
   document.getElementById("marker").style.bottom = fillPct + "%";
@@ -267,6 +328,34 @@ function render(startTime, angleActuel, isDemo) {
   document.getElementById("val-end").textContent = fmtDateHeure(endTime);
   document.getElementById("val-elapsed").textContent = fmtDuration(Math.max(elapsedH, 0));
 
+  // Repères des mouvements réels détectés, positionnés sur la même échelle que la jauge
+  const ticksHolder = document.getElementById("move-ticks");
+  ticksHolder.innerHTML = "";
+  if (mouvements && mouvements.length) {
+    mouvements.forEach(m => {
+      const pct = Math.min(Math.max((m.temps_ecoule_h / dureeCycleH) * 100, 0), 100);
+      const t = document.createElement("div");
+      t.className = "move-tick";
+      t.style.bottom = pct + "%";
+      ticksHolder.appendChild(t);
+    });
+  }
+
+  // Prochain mouvement estimé (dernier mouvement réel + intervalle de phase, sans dérive)
+  const nextMoveEl = document.getElementById("next-move");
+  const banner = document.getElementById("alert-banner");
+  if (prochainMouvement) {
+    nextMoveEl.style.display = "flex";
+    const diffMin = Math.round((prochainMouvement - now) / 60000);
+    document.getElementById("val-next-move").textContent =
+      diffMin > 0 ? `dans ${diffMin} min (${fmtDateHeure(prochainMouvement)})` : "imminent";
+    const dansLaMarge = alerteA && now >= alerteA && now < prochainMouvement;
+    banner.classList.toggle("active", !!dansLaMarge);
+  } else {
+    nextMoveEl.style.display = "none";
+    banner.classList.remove("active");
+  }
+
   const dot = document.getElementById("status-dot");
   const badge = document.getElementById("badge");
   if (isDemo) {
@@ -275,30 +364,49 @@ function render(startTime, angleActuel, isDemo) {
     badge.style.display = "block";
   } else {
     dot.classList.remove("demo");
-    document.getElementById("status-text").textContent = "Dernière lecture — à l'instant";
+    const angleTxt = (dernierAngle != null) ? ` · dernier angle connu ${dernierAngle}°` : "";
+    document.getElementById("status-text").textContent = "Connecté" + angleTxt;
     badge.style.display = "none";
   }
 }
 
 async function refresh() {
-  if (!SHEET_ID) {
+  if (!GYRO_WEBAPP_URL || GYRO_WEBAPP_URL.startsWith("COLLEZ_ICI")) {
     const demoStart = new Date(Date.now() - 40 * 3600000);
-    render(demoStart, 52, true);
+    const demoMouvements = [10, 22, 34, 46, 58, 70].map(h => ({ temps_ecoule_h: h }));
+    const demoProchain = new Date(Date.now() + 8 * 60000);
+    const demoAlerte = new Date(Date.now() - 5000);
+    render(demoStart, 96, true, 52, demoMouvements, demoProchain, demoAlerte);
     return;
   }
   try {
-    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${SHEET_GID}`;
-    const res = await fetch(url);
-    const text = await res.text();
-    const rows = text.trim().split("\n").map(r => r.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
-    const headers = rows[0];
-    const data = rows.slice(1).map(r => { const o = {}; headers.forEach((h,i)=>o[h]=r[i]); return o; });
-    const first = data[0], last = data[data.length - 1];
-    render(new Date(first[COL_TIMESTAMP]), parseFloat(last[COL_ANGLE]), false);
+    const url = `${GYRO_WEBAPP_URL}?type=gyro_status&code=${encodeURIComponent(ACCESS_CODE)}`;
+    const res = await fetch(url, { cache: "no-store" });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || "accès refusé");
+    if (!json.cycle_actif) {
+      document.getElementById("status-text").textContent = "Aucun cycle en cours";
+      document.getElementById("badge").style.display = "none";
+      document.getElementById("next-move").style.display = "none";
+      document.getElementById("alert-banner").classList.remove("active");
+      return;
+    }
+    const prochain = json.prochain_mouvement_prevu ? new Date(json.prochain_mouvement_prevu) : null;
+    const alerteA = json.alerte_a ? new Date(json.alerte_a) : null;
+    render(
+      new Date(json.t0),
+      parseFloat(json.duree_cycle_h),
+      false,
+      json.dernier_angle,
+      json.mouvements || [],
+      prochain,
+      alerteA
+    );
   } catch (e) {
     document.getElementById("status-text").textContent = "Erreur : " + e.message;
   }
 }
+
 
 const tube = document.getElementById("tube");
 for (let i = 0; i < 6; i++) {
@@ -313,7 +421,7 @@ for (let i = 0; i < 6; i++) {
 }
 
 refresh();
-setInterval(refresh, 60000);
+setInterval(refresh, 10000); // 10 sec, pour ne pas manquer la fenêtre d'alerte pré-mouvement
 </script>
 
 </body>
