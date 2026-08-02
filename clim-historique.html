@@ -181,7 +181,7 @@ const ACCESS_CODE = getCookie("belin_code") || "";
 
 async function chargerStatut(){
   try{
-    const url = `${CLIM_WEBAPP_URL}?type=statutClim&code=${encodeURIComponent(ACCESS_CODE)}`;
+    const url = `${CLIM_WEBAPP_URL}?type=statutClim&module=ClimCuverie&code=${encodeURIComponent(ACCESS_CODE)}`;
     const res = await fetch(url, { cache:"no-store" });
     const json = await res.json();
     if(!json.ok) throw new Error(json.error || "acces refuse");
@@ -201,7 +201,7 @@ async function chargerStatut(){
 
 async function chargerHistorique(){
   try{
-    const url = `${CLIM_WEBAPP_URL}?type=historiqueClim&code=${encodeURIComponent(ACCESS_CODE)}`;
+    const url = `${CLIM_WEBAPP_URL}?type=historiqueClim&module=ClimCuverie&code=${encodeURIComponent(ACCESS_CODE)}`;
     const res = await fetch(url, { cache:"no-store" });
     const json = await res.json();
     if(!json.ok) throw new Error(json.error || "acces refuse");
