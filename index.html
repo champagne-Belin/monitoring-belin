@@ -201,7 +201,8 @@
 
   <div class="quicklinks">
     <a href="gyropalette-cycle.html">🍾 Cycle Gyropalette</a>
-    <a href="clim-historique.html">❄️ Historique Clim</a>
+    <a href="clim-historique.html">❄️ Historique Clim Cuverie</a>
+    <a href="clim-cave-historique.html">🧊 Historique Clim Cave</a>
   </div>
 
   <header>
@@ -223,6 +224,7 @@
     <div class="card" id="card-maisonT"><div class="label">Maison (maisonT)</div></div>
     <div class="card" id="card-gyro"><div class="label">Gyropalette</div></div>
     <div class="card" id="card-climcuverie"><div class="label">Clim Cuverie</div></div>
+    <div class="card" id="card-climcave"><div class="label">Clim Cave</div></div>
   </div>
 
   <section class="chart-section">
@@ -801,11 +803,11 @@ async function loadTempOnlyCard(key){
 }
 
 // ============================================================
-// CLIM CUVERIE — statut (en marche / a l'arret) pour la carte dashboard
+// CLIM CUVERIE / CLIM CAVE — statut (en marche / a l'arret) pour les cartes dashboard
 // ============================================================
-async function loadClimCuverie(){
+async function loadClimStatus_(module, targetId, titre){
   try{
-    const url = `${CLIM_WEBAPP_URL}?type=statutClim&code=${encodeURIComponent(accessCode)}`;
+    const url = `${CLIM_WEBAPP_URL}?type=statutClim&module=${encodeURIComponent(module)}&code=${encodeURIComponent(accessCode)}`;
     const res = await fetch(url, {cache:'no-store'});
     const json = await res.json();
     if(!json.ok) throw new Error(json.error || "acces refuse");
@@ -817,10 +819,10 @@ async function loadClimCuverie(){
       ? "Dernier arrêt : " + json.dernierArret
       : "Aucun arrêt enregistré";
 
-    const el = document.getElementById("card-climcuverie");
+    const el = document.getElementById(targetId);
     el.className = "card " + (enMarche ? "ok" : "bad");
     el.innerHTML = `
-      <div class="label">Clim Cuverie</div>
+      <div class="label">${titre}</div>
       <div class="value-row">
         <div class="stat"><span class="num" style="font-size:22px;">${valeurEtat}</span></div>
       </div>
@@ -828,9 +830,12 @@ async function loadClimCuverie(){
       <div class="updated">${dernierArret}</div>
     `;
   } catch(e){
-    renderCard({ title:"Clim Cuverie", error:e.message, worstStatus:'bad', targetId:'card-climcuverie' });
+    renderCard({ title:titre, error:e.message, worstStatus:'bad', targetId:targetId });
   }
 }
+
+async function loadClimCuverie(){ return loadClimStatus_('ClimCuverie', 'card-climcuverie', 'Clim Cuverie'); }
+async function loadClimCave(){ return loadClimStatus_('ClimCave', 'card-climcave', 'Clim Cave'); }
 
 async function loadAll(){
   document.getElementById('lastUpdate').textContent = 'Chargement…';
@@ -842,7 +847,8 @@ async function loadAll(){
     loadTempOnlyCard('cave'),
     loadTempOnlyCard('habillage'),
     loadTempOnlyCard('maison'),
-    loadClimCuverie()
+    loadClimCuverie(),
+    loadClimCave()
   ]);
   const now = new Date();
   document.getElementById('lastUpdate').textContent = 'Actualisé à ' + now.toLocaleTimeString('fr-FR');
