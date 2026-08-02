@@ -201,12 +201,13 @@
 
   <div class="quicklinks">
     <a href="gyropalette-cycle.html">🍾 Cycle Gyropalette</a>
+    <a href="clim-historique.html">❄️ Historique Clim</a>
   </div>
 
   <header>
     <div>
       <h1>Monitoring <span>IoT</span> — Champagne O.BELIN</h1>
-      <div class="meta">maisonT · Cuverie · Cave · Habillage · Maison · Pression · Gyropalette</div>
+      <div class="meta">maisonT · Cuverie · Cave · Habillage · Maison · Pression · Gyropalette · Clim Cuverie</div>
     </div>
     <div class="meta">
       <div id="lastUpdate">Chargement…</div>
@@ -221,6 +222,7 @@
     <div class="card" id="card-maison"><div class="label">Maison</div></div>
     <div class="card" id="card-maisonT"><div class="label">Maison (maisonT)</div></div>
     <div class="card" id="card-gyro"><div class="label">Gyropalette</div></div>
+    <div class="card" id="card-climcuverie"><div class="label">Clim Cuverie</div></div>
   </div>
 
   <section class="chart-section">
@@ -275,6 +277,9 @@ const TEMP_ONLY_SOURCES = {
   habillage: { sheet:"habillage", label:"Habillage", tMin:12, tMax:28 },
   maison:    { sheet:"maison", label:"Maison", tMin:15, tMax:25 }
 };
+
+// URL du script Apps Script dedie a Clim Cuverie (deploiement separe)
+const CLIM_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyBxYsnDxVuOPeftqpM_Z1EqOsQs80phnHN5L5nvUxuCJZg_5Zp-mdRWOgBzZI4cC5CAg/exec";
 
 // Onglet Config : une ligne par module, avec seuils et valeurs Live (DateLive / PressionLive / TemperatureLive)
 let configCache = null;
@@ -795,6 +800,38 @@ async function loadTempOnlyCard(key){
   }
 }
 
+// ============================================================
+// CLIM CUVERIE — statut (en marche / a l'arret) pour la carte dashboard
+// ============================================================
+async function loadClimCuverie(){
+  try{
+    const url = `${CLIM_WEBAPP_URL}?type=statutClim&code=${encodeURIComponent(accessCode)}`;
+    const res = await fetch(url, {cache:'no-store'});
+    const json = await res.json();
+    if(!json.ok) throw new Error(json.error || "acces refuse");
+
+    const enMarche = json.etat === "OK";
+    const valeurEtat = enMarche ? "En marche" : "À l'arrêt";
+
+    const dernierArret = json.dernierArret
+      ? "Dernier arrêt : " + json.dernierArret
+      : "Aucun arrêt enregistré";
+
+    const el = document.getElementById("card-climcuverie");
+    el.className = "card " + (enMarche ? "ok" : "bad");
+    el.innerHTML = `
+      <div class="label">Clim Cuverie</div>
+      <div class="value-row">
+        <div class="stat"><span class="num" style="font-size:22px;">${valeurEtat}</span></div>
+      </div>
+      <div class="status-badge">${enMarche ? "Fonctionnement normal" : "Arrêt détecté"}</div>
+      <div class="updated">${dernierArret}</div>
+    `;
+  } catch(e){
+    renderCard({ title:"Clim Cuverie", error:e.message, worstStatus:'bad', targetId:'card-climcuverie' });
+  }
+}
+
 async function loadAll(){
   document.getElementById('lastUpdate').textContent = 'Chargement…';
   await Promise.allSettled([
@@ -804,7 +841,8 @@ async function loadAll(){
     loadGyro(),
     loadTempOnlyCard('cave'),
     loadTempOnlyCard('habillage'),
-    loadTempOnlyCard('maison')
+    loadTempOnlyCard('maison'),
+    loadClimCuverie()
   ]);
   const now = new Date();
   document.getElementById('lastUpdate').textContent = 'Actualisé à ' + now.toLocaleTimeString('fr-FR');
